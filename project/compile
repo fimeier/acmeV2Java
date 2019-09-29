@@ -1,3 +1,9 @@
 #!/bin/bash
 
+#This file will be executed by the automated-testing environment before any tests
+#are run. You should modify this file. If your project needs to be compiled, this file
+#should contain the commands needed to compile the project. If no compilation is
+#needed, this file can do nothing (or install dependencies). Note that you are only
+#allowed to install explicitly allowed dependencies, see Section 4.
+
 echo "Compile your project here"

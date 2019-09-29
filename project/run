@@ -1,4 +1,10 @@
 #!/bin/bash
+
+#This file will be executed by the testing environment when the tests are being run.
+#You should modify this file. It will receive the command-line arguments listed in
+#Section 3.3.2. Your compile script may overwrite this file.
+
+
 DIRECTORY=$(dirname "$0")
 echo "Changing to ${DIRECTORY}"
 cd  "$DIRECTORY" || exit 1

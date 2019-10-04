@@ -11,4 +11,4 @@ cd  "$DIRECTORY" || exit 1
 
 echo "Run your project here."
 
-java -jar target/runACME-jar-with-dependencies.jar
+java -jar runACME-jar-with-dependencies.jar

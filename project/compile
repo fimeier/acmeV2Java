@@ -7,3 +7,6 @@
 #allowed to install explicitly allowed dependencies, see Section 4.
 
 echo "Compile your project here"
+
+#cd ..
+mvn verify

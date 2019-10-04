@@ -37,6 +37,7 @@
           	</manifest>
           </archive>
           <finalName>runACME</finalName>
+          <outputDirectory>.</outputDirectory>  
         </configuration>
       </plugin>
     </plugins>

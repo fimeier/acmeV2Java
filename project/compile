@@ -8,5 +8,5 @@
 
 echo "Compile your project here"
 
-#cd ..
+cd ..
 mvn verify

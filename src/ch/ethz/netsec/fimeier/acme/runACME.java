@@ -13,8 +13,8 @@ public class runACME {
 
 	
 
-	public static String certFullPath = "certificates/testfolder/localhost.crt";
-	public static String keystoreFullPath = "certificates/testfolder/keystore.jks";
+	public static String certFullPath = "../certificates/testfolder/localhost.crt";
+	public static String keystoreFullPath = "../certificates/testfolder/keystore.jks";
 
 
 	public static void main(String[] args) throws Exception {

@@ -1,5 +1,6 @@
 
 # fimeier-acme-project-netsec-fall-19
+
 Deadline: 8.11.2019 23:59
 
 
@@ -10,24 +11,56 @@ Deadline: 8.11.2019 23:59
   - [HTTPS Requests](#https-requests)
 - [Terminology](#terminology)
 
+# Installation
+- java add pebble_https_ca.pem
+    - cd projectfolder:
+        - keytool -import -trustcacerts -file pebble_https_ca.pem -alias pebble_acme_ca -keystore acme_keystore
+        - used password: password
+
+- go language
+    - sudo add-apt-repository ppa:longsleep/golang-backports
+    - sudo apt-get update
+    - sudo apt-get install golang-go
+    - go env -w GOPATH=~/netsecprojects/go
+    - ~~Edit your ~/.bash_profile to add the following line:~~ 
+    - ~~export GOPATH=~/netsecprojects/go~~
+    - ~~source ~/.bash_profile~~
+- pebble
+    - go get -u github.com/letsencrypt/pebble/...
+    - cd $GOPATH/src/github.com/letsencrypt/pebble && go install ./...
+    - netsecprojects/go/bin/pebble.....
+    - /home/fimeier/netsecprojects/go/src/github.com/letsencrypt/pebble/pebble -config ./test/config/pebble-config.json
+
+
 
 # ACMEv2 (stuff extracted from https://github.com/ietf-wg-acme/acme/blob/master/draft-ietf-acme-acme.md)
+
 ## Encoding
-* All requests and responses sent via HTTP by ACME clients, ACME servers, and validation servers as well as any inputs for digest computations MUST be encoded using the UTF-8 character set {{!RFC3629}}. Note that identifiers that appear in certificates may have their own encoding considerations (e.g., DNS names containing non-ASCII characters are expressed as A-labels rather than U-labels). Any such encoding considerations are to be applied prior to the aforementioned UTF-8 encoding.
+
+- All requests and responses sent via HTTP by ACME clients, ACME servers, and validation servers as well as any inputs for digest computations **MUST be encoded using the UTF-8 character set** {{!RFC3629}}. Note that identifiers that appear in certificates may have their own encoding considerations (e.g., DNS names containing non-ASCII characters are expressed as A-labels rather than U-labels). Any such encoding considerations are to be applied prior to the aforementioned UTF-8 encoding.
+
+- **Compare Binary fields in the JSON objects using base64url encoding**
+
 # Message Transport
-* between an ACME client and an ACME server are done over HTTPS, using JSON Web Signature (JWS) RFC7515 https://tools.ietf.org/html/rfc7515
-* HTTPS provides server authentication and confidentiality
-* With some ACME-specific extensions, JWS provides authentication of the client's request payloads, anti-replay protection, and integrity for the HTTPS request URL
+
+- between an ACME client and an ACME server are done over HTTPS, using JSON Web Signature (JWS) RFC7515 https://tools.ietf.org/html/rfc7515
+
+- HTTPS provides server authentication and confidentiality
+- With some ACME-specific extensions, JWS provides authentication of the client's request payloads, anti-replay protection, and integrity for the HTTPS request URL
 
 ## HTTPS Requests
-* Each ACME function is accomplished by the client sending a sequence of HTTPS requests to the server {{!RFC2818}}, carrying JSON messages {{!RFC8259}}. Use of HTTPS is REQUIRED.
-* **Normal-setting:** the ACME client is the HTTPS client and the ACME server is the HTTPS server.
-* **Exceptions:** The ACME server acts as a client when **validating challenges**:
-  * an HTTP client when validating an 'http-01' challenge, a DNS client with 'dns-01', etc.
-* the ACME protocol itself includes anti-replay protections in all cases where they are required. For this reason, there are **no restrictions on what ACME data can be carried in 0-RTT.**
-* ACME clients
-  * **MUST send a User-Agent header field**, in accordance with {{!RFC7231}}. This header field SHOULD include the name and version of the ACME software in addition to the name and version of the underlying HTTP client software.
-  * **SHOULD send an Accept-Language header field **in accordance with {{!RFC7231}} to enable localization of error messages.
+
+- Each ACME function is accomplished by the client sending a sequence of HTTPS requests to the server {{!RFC2818}}, carrying JSON messages {{!RFC8259}}. Use of HTTPS is REQUIRED.
+  
+- **Normal-setting:** the ACME client is the HTTPS client and the ACME server is the HTTPS server.
+- **Exceptions:** The ACME server acts as a client when **validating challenges**:
+  - an HTTP client when validating an 'http-01' challenge, a DNS client with 'dns-01', etc.
+- the ACME protocol itself includes anti-replay protections in all cases where they are required. For this reason, there are **no restrictions on what ACME data can be carried in 0-RTT.**
+
+- ACME clients
+  - **MUST send a User-Agent header field**, in accordance with {{!RFC7231}}. This header field SHOULD include the name and version of the ACME software in addition to the name and version of the underlying HTTP client software.
+  - **SHOULD send an Accept-Language header field **in accordance with {{!RFC7231}} to enable localization of error messages.
+- **Binary fields in the JSON objects used by ACME are encoded using base64url encoding** described in Section 5 of {{!RFC4648}} according to the profile specified in JSON Web Signature in Section 2 of {{!RFC7515}}. This encoding uses a URL safe character set. Trailing '=' characters MUST be stripped. Encoded values that include trailing '=' characters MUST be rejected as improperly encoded.
 
 
 
@@ -58,7 +91,9 @@ Deadline: 8.11.2019 23:59
 
 
 # Terminology
+
 copied from https://www.ietf.org/rfc/rfc2119.txt
+
 1. **MUST**   This word, or the terms "REQUIRED" or "SHALL", mean that the
    definition is an absolute requirement of the specification.
 

@@ -9,4 +9,4 @@
 echo "Compile your project here"
 
 #cd ..
-#mvn verify
+mvn verify

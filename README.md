@@ -11,6 +11,9 @@ Deadline: 8.11.2019 23:59
   - [HTTPS Requests](#https-requests)
 - [Terminology](#terminology)
 
+# TODO
+- prüfe ob json values anders empfangen/encoded werden müssen... vergleiche meta
+
 # Installation
 - java add pebble_https_ca.pem
     - cd projectfolder:

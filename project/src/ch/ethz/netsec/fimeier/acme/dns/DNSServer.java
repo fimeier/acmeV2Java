@@ -102,7 +102,7 @@ public class DNSServer {
 					dnsSocket.receive(packetIn);
 				} catch (IOException e1) {
 					// TODO Auto-generated catch block
-					//e1.printStackTrace();
+					e1.printStackTrace();
 					return;
 				}
 				Message msg = null;
@@ -115,6 +115,12 @@ public class DNSServer {
 				Header header = msg.getHeader();
 
 				Record question = msg.getQuestion();
+				
+				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
+				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
+				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
+				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
+
 
 				// Prepare a response
 				Message response = new Message(header.getID());
@@ -132,6 +138,8 @@ public class DNSServer {
 				if (question.getType() == Type.A && a != null) {
 					response.addRecord(new ARecord(name, DClass.IN, TTL, a), Section.ANSWER);
 				}
+				
+				System.out.println("MyDNSHandler():"+response.toString());
 
 				byte[] outBuffer = response.toWire();
 				DatagramPacket packet = new DatagramPacket(outBuffer, outBuffer.length, packetIn.getAddress(), packetIn.getPort());

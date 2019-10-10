@@ -1,6 +1,8 @@
 package ch.ethz.netsec.fimeier.acme.client;
 
 
+
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -14,9 +16,9 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
 import java.security.Signature;
 import java.security.interfaces.RSAPublicKey;
-import java.security.spec.ECGenParameterSpec;
 import java.util.ArrayList;
 import java.util.Base64;
 //import org.apache.commons.codec.binary.Hex;
@@ -27,6 +29,9 @@ import javax.json.JsonObject;
 import javax.json.JsonReader;
 import javax.json.JsonValue;
 import javax.net.ssl.HttpsURLConnection;
+
+
+import ch.ethz.netsec.fimeier.acme.runACME;
 
 
 public class ACMEClientv2 {
@@ -72,13 +77,14 @@ public class ACMEClientv2 {
 	private URL orderObjectLocation;
 	private JsonValue dnsChallengeJson;
 	private JsonValue httpChallengeJson;
+	private Boolean readForFinalization = false;
 
 	/*
 	 * Crypto stuff
 	 */
 	private int keySize;
 	private KeyPairGenerator keyGen;
-	private KeyPair keyPair; 
+	private KeyPair keyPair;
 
 
 
@@ -97,6 +103,9 @@ public class ACMEClientv2 {
 	private String getNBigIntegerEncoded() {
 		RSAPublicKey pk = (RSAPublicKey) keyPair.getPublic();
 		String nBigIntegerEncoded = convertBigIntegerToBase64String(pk.getModulus());
+
+		//String nBigIntegerEncodedRef = BigEndianBigInteger.toBase64Url(pk.getModulus());
+
 		return nBigIntegerEncoded;
 	}
 
@@ -117,22 +126,28 @@ public class ACMEClientv2 {
 	 */
 	private String convertBigIntegerToBase64String(BigInteger bInt) {
 		byte[] twosComplementBytes = bInt.toByteArray();
-		//		byte[] magnitude;
+		byte[] magnitude;
 
-		//		if ((bInt.bitLength() % 8 == 0) && (twosComplementBytes[0] == 0) && twosComplementBytes.length > 1)
-		//		{
-		//			magnitude = ByteUtil.subArray(twosComplementBytes, 1, twosComplementBytes.length - 1);
-		//		}
-		//		else
-		//		{
-		//			magnitude = twosComplementBytes;
-		//		}
+		if ((bInt.bitLength() % 8 == 0) && (twosComplementBytes[0] == 0) && twosComplementBytes.length > 1)
+		{
+			//magnitude = ByteUtil.subArray(twosComplementBytes, 1, twosComplementBytes.length - 1);
+
+			byte[] magnitudeTemp = new byte[twosComplementBytes.length - 1];
+			System.arraycopy(twosComplementBytes, 1, magnitudeTemp, 0, magnitudeTemp.length);
+			magnitude = magnitudeTemp;
+		}
+		else
+		{
+			magnitude = twosComplementBytes;
+		}
 		//		Base64Url base64Url = new Base64Url();
-		//n = base64Url.base64UrlEncode(magnitude);
+		//		String sRef = base64Url.base64UrlEncode(magnitude);
 
 		//Standard Java
-		//String s = Base64.getUrlEncoder().withoutPadding().encodeToString(magnitude);// Regular base64 encoder
-		String s = Base64.getUrlEncoder().withoutPadding().encodeToString(twosComplementBytes);// Regular base64 encoder
+		String s = Base64.getUrlEncoder().withoutPadding().encodeToString(magnitude);// Regular base64 encoder
+		//String s = Base64.getUrlEncoder().withoutPadding().encodeToString(twosComplementBytes);// Regular base64 encoder
+
+		//s = sRef;
 
 		s = s.split("=")[0]; // Remove any trailing ’=’s
 		s = s.replace('+', '-'); // 62nd char of encoding
@@ -337,10 +352,11 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	}
 
 	public JsonObject createJwk() {
+		//REMARK: Fields are in correct order for thumbprint https://tools.ietf.org/pdf/rfc7638.pdf 3.1
 		return Json.createObjectBuilder()
+				.add("e", getEBigIntegerEncoded())
 				.add("kty",keyPair.getPublic().getAlgorithm())
 				.add("n", getNBigIntegerEncoded())
-				.add("e", getEBigIntegerEncoded())
 				.build();
 	}
 
@@ -448,20 +464,30 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		postAsGetAuthorizationResources();
 
 		fullfillChallenge();
-		
-		postAsGetAuthorizationResources();
 
-		
+
+		//		try {
+		//			while(!readForFinalization) {
+		//				postAsGetOrderStatus();
+		//				Thread.currentThread().sleep(1000);
+		//			}
+		//
+		//		} catch (InterruptedException e) {
+		//			// TODO Auto-generated catch block
+		//			e.printStackTrace();
+		//		}
+
+
 		//finalizeNewOrder();
-		
-		
-		
-		//Not needed helpers
-		postAsGetOrders();
-		
-		postAsGetOrderStatus();
 
-		
+
+
+		//Not needed helpers
+		//allready received in postNewOrder().. but usefull if "lost"
+		postAsGetOrders();
+
+
+
 
 
 
@@ -647,9 +673,9 @@ Content-Type: application/jose+json
 
 			JsonObject responseJson = parseResponseIntoJson(connectionACME);
 			orderObject = responseJson;
-			
+
 			orderObjectLocation = new URL(connectionACME.getHeaderField("Location"));
-			
+
 			System.out.println("postNewOrder(): "+responseJson);
 			System.out.println("postNewOrder() orderObjectLocation: "+orderObjectLocation.toString());
 
@@ -680,6 +706,11 @@ Content-Type: application/jose+json
 		try {
 
 			//ev mehrere Objekte im array
+
+			for (JsonValue a: orderObject.get("authorizations").asJsonArray()){
+				System.out.println("!!!!!authorizations-list"+a.toString());
+			}
+
 			String authorizations = removeQuotes(orderObject.get("authorizations").asJsonArray().get(0).toString());
 			System.out.println("authorizations="+authorizations);
 
@@ -706,7 +737,7 @@ Content-Type: application/jose+json
 			 * "expires":"2019-10-09T13:14:13Z"}
 			 * 
 			 */
-						
+
 			for (JsonValue challenge: responseJson.get("challenges").asJsonArray()) {
 
 				System.out.println("type="+((JsonObject) challenge).get("type").toString());
@@ -732,31 +763,196 @@ Content-Type: application/jose+json
 		}
 	}
 
+	public byte[] getSHA256AsBytes(String toHashedString) {
+		byte[] thumbprintAsBytes = null;
+		try {
+			byte[] hashInputBytes = toHashedString.getBytes(StandardCharsets.UTF_8);//StringUtil.getBytesUtf8(jkwAsString);
+			MessageDigest digestSHA256 = MessageDigest.getInstance("SHA-256");
+			digestSHA256.update(hashInputBytes);
+			thumbprintAsBytes = digestSHA256.digest();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return thumbprintAsBytes;
+	}
+	
+	public String getSHA256AsString(String toHashedString) {
+		String thumbprint = Base64.getUrlEncoder().withoutPadding().encodeToString(getSHA256AsBytes(toHashedString));
+		return thumbprint;
+	}
+
+
+	public String getThumbPrint() {
+		try {
+			/*
+		"e"
+		 o "kty"
+		 o "n"
+			 */
+			String jkwAsString = createJwk().toString();
+			//n ost falsch codiert...
+
+//			byte[] hashInputBytes = jkwAsString.getBytes(StandardCharsets.UTF_8);//StringUtil.getBytesUtf8(jkwAsString);
+//			MessageDigest md = MessageDigest.getInstance("SHA-256");
+//			md.update(hashInputBytes);
+//			byte[] thumbprintAsBytes = md.digest();
+			
+			byte[] thumbprintAsBytes = getSHA256AsBytes(jkwAsString);
+
+
+			//String thumbprint = base64UrlEncode(thumbprintAsBytes);
+			//String thumbprint = Base64.getUrlEncoder().withoutPadding().encodeToString(thumbprintAsBytes);
+			String thumbprint = getSHA256AsString(jkwAsString);
+					
+			//encodeBase64String(thumbprintAsBytes.g, false);
+
+			//			
+			//			String referenceTumbprint = base64UrlEncode(JoseUtils.thumbprint(keyPair.getPublic()));
+			//			byte[] thumbprintAsBytesReference = JoseUtils.thumbprint(keyPair.getPublic());
+			//			System.out.println("getThumbPrint(): referenceTumbprint="+referenceTumbprint);
+			//			System.out.println("getThumbPrint(): thumbprint="+thumbprint);
+
+
+
+			/*
+			 * test
+			 */
+			//			byte[] sha256hash(String z) {
+			//			 MessageDigest md = MessageDigest.getInstance("SHA-256");
+			//	            md.update(z.getBytes("UTF-8"));
+			//	            return md.digest();
+			//			}
+			//	            
+			//			 String shit = base64UrlEncode(sha256hash(getAuthorization()));
+			//			
+			//			  public String getAuthorization() {
+			//			        PublicKey pk = getLogin().getKeyPair().getPublic();
+			//			        return getToken() + '.' + base64UrlEncode(JoseUtils.thumbprint(pk));
+
+
+			return thumbprint;
+
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return "";
+
+	}
 
 	public void fullfillChallenge() {
 		try {
 			URL resourceUrl = null;
+			String token = "";
 
 			if (challengeType.equals("dns01")){
+				//{"type":"dns-01"
+				//	,"url":"https://127.0.0.1:14000/chalZ/dysNT8Xho1TiVLDczijJwCjY2EvRny30xvpz_a3tx7c"
+				//	,"token":"ppRMzz1zMEyICBoubIxGl84IUuWShyjZdwi5-RNpvIo"
+				//	,"status":"pending"},
 
 				String challengeUrlAsString = removeQuotes(dnsChallengeJson.asJsonObject().get("url").toString());
 				System.out.println("dns01-challengeUrlAsString="+challengeUrlAsString);
 				resourceUrl = new URL(challengeUrlAsString);
+
+				token = removeQuotes(dnsChallengeJson.asJsonObject().get("token").toString());
+
+				System.out.println("tokentokentokentokentokentokentoken="+token);
+
+				/*
+				 * TODO fullfill challenge
+				 */
+
+				//prepare dns-record
+
+				//keyAuthorization = token || ’.’ || base64url(Thumbprint(accountKey))
+				String thumbprint = getThumbPrint();
+
+
+				//byte[] sha256hash(String z) {				 
+				//				getAuthorization() = getToken() + '.' + base64UrlEncode(JoseUtils.thumbprint(pk))
+				//					MessageDigest md = MessageDigest.getInstance("SHA-256");
+				//			            md.update(z.getBytes("UTF-8"));
+				//			            return md.digest();
+				//					}
+				//			            
+				//				getDigest() = base64UrlEncode(sha256hash(getAuthorization()));
+				//
+
+				String keyAuthorization = token + '.' + thumbprint;
+
+				//String hashOfKeyAuthorization = base64UrlEncode(sha256hash(keyAuthorization));
+				String hashOfKeyAuthorization = getSHA256AsString(keyAuthorization);
+				System.out.println("fullfillChallenge(): keyAuthorization ="+keyAuthorization);
+				System.out.println("fullfillChallenge(): keyAuthorization2="+hashOfKeyAuthorization);
+
+
+				////FUCK it!!!!!! double sha...
+
+
+				//ExpectedKeyAuthorization=6H1pM_1in6MeDeXH59Rwf28450HLEgj2dD_2AL6e8yQ.sUtL3AfqVZE_C-BvcNq1Y9EqmQBLBx6YkBBYbNhJwtY
+				//						  "6H1pM_1in6MeDeXH59Rwf28450HLEgj2dD_2AL6e8yQ.sUtL3AfqVZE_C-BvcNq1Y9EqmQBLBx6YkBBYbNhJwtY"
+
+				//_acme-challenge.www.example.org. 300 IN TXT "gfj9Xq...Rg85nM"
+
+				// domäne mit oder ohne punkt????
+				String challengeDomain = "_acme-challenge."+domain;
+
+				runACME.dnsServer.createARecord(domain); //createTxtRecord
+
+				runACME.dnsServer.createTxtRecord(challengeDomain, hashOfKeyAuthorization); //createTxtRecord
+
 			} 
 
 
 			//resourceUrl = new URL()
 
 			if (challengeType.equals("http01")){
-
+				/*
+				 * The path at which the resource is provisioned is comprised of the
+					fixed prefix "/.well-known/acme-challenge/", followed by the "token"
+					value in the challenge. The value of the resource MUST be the ASCII
+					representation of the key authorization.
+				 */
+				//  http://example.com:5002/.well-known/acme-challenge/GDO0gPJA9RKoC1KRg8BPMz5FzOnjm5d2skz3eTFh2cY
 				String challengeUrlAsString = removeQuotes(httpChallengeJson.asJsonObject().get("url").toString());
 				System.out.println("http01-challengeUrlAsString="+challengeUrlAsString);
 				resourceUrl = new URL(challengeUrlAsString);
 
+				/*
+				 * TODO fullfill challenge
+				 */
+
+				//1 create dns to find http server
+				runACME.dnsServer.createARecord(domain); //createTxtRecord
+				//2"create file on webserver" 
+				// .well-known/acme-challenge/ + Token
+				token = removeQuotes(httpChallengeJson.asJsonObject().get("token").toString());
+				String filePath = "/.well-known/acme-challenge/" + token;
+				System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+				System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+				System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+
+				//3 create content for that file the key keyAuthorization
+				String thumbprint = getThumbPrint();
+				String keyAuthorization = token + '.' + thumbprint;
+
+				//setting webserver
+				runACME.challengeHttpsServer.challengeUrl = filePath;
+				runACME.challengeHttpsServer.challengeContent = keyAuthorization;
+
+
 			}
 
+			//test
+			//payload ist "{}" <-FUCK YOU ACME...... 5h FUCK!!!! why not ""???? Fuck rfc... :-)
+			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
 
-			HttpsURLConnection connectionACME = postAsGet(resourceUrl); 
+			String signatureAsString = getSignatureAsString(protectedPart.toString(),"{}");
+
+			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), "{}", signatureAsString);
+
+			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
 
 			JsonObject responseJson = parseResponseIntoJson(connectionACME);
 
@@ -771,9 +967,9 @@ Content-Type: application/jose+json
 			e.printStackTrace();
 		}
 	}
-	
-	
-/*	
+
+
+	/*	
 	POST /acme/order/TOlocE8rfgo/finalize HTTP/1.1
 	Host: example.com
 	Content-Type: application/jose+json
@@ -789,11 +985,11 @@ Content-Type: application/jose+json
 	}),
 	"signature": "uOrUfIIk5RyQ...nw62Ay1cl6AB"
 	}
-*/
+	 */
 	private void finalizeNewOrder() {
 
 		try {
-			
+
 
 			String finalizeURL = removeQuotes(orderObject.get("finalize").toString());
 			System.out.println("finalizeURL="+finalizeURL);
@@ -806,7 +1002,7 @@ Content-Type: application/jose+json
 							.add(Json.createObjectBuilder().add("type","dns").add("value",domain).build())
 							)
 					.build();
-			
+
 
 
 			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
@@ -827,12 +1023,12 @@ Content-Type: application/jose+json
 			e.printStackTrace();
 		}
 	}
-	
+
 	/*
 	 * returns the status/details of orders orderObjectLocation
 	 */
 	public void postAsGetOrderStatus() {
-		
+
 		URL resourceUrl = orderObjectLocation;
 
 		HttpsURLConnection connectionACME = postAsGet(resourceUrl);
@@ -840,6 +1036,14 @@ Content-Type: application/jose+json
 		JsonObject responseJson = parseResponseIntoJson(connectionACME);
 
 		System.out.println("postAsGetOrderStatus(): "+responseJson);
+		String status = responseJson.getString("status");
+		if (status.equals("ready")) {
+			readForFinalization = true;
+			System.out.println("postAsGetOrderStatus(): status="+status + " => setting readForFinalization = true ...");
+		} else {
+			System.out.println("postAsGetOrderStatus(): status="+status + " => not ready ...");
+
+		}
 
 	}
 

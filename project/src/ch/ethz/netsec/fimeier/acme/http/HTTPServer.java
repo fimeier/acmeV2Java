@@ -33,6 +33,14 @@ public class HTTPServer {
 	private int serverPort = 8000;
 
 	private String mode = "";
+	
+	
+	/*
+	 * State Variables
+	 */
+	//change this to a list/hashmap if needed
+	public String challengeUrl;
+	public String challengeContent;
 
 
 	public HTTPServer(int port, String mode) throws Exception {
@@ -41,6 +49,13 @@ public class HTTPServer {
 		this.mode = mode;
 
 		switch (mode) {
+		case "challenge": {
+			server = HttpServer.create(new InetSocketAddress(this.serverPort), 0);
+			server.createContext("/", new MyHandlerChallenge());
+			server.setExecutor(null); // creates a default executor
+			server.start();
+			break;			
+		}
 		case "shutdown": {
 			server = HttpServer.create(new InetSocketAddress(this.serverPort), 0);
 			server.createContext("/", new MyHandlerShutdown());
@@ -122,6 +137,30 @@ public class HTTPServer {
 		OutputStream os = t.getResponseBody();
 		os.write(resp);
 		os.close();
+	}
+
+
+	class MyHandlerChallenge implements HttpHandler {
+
+		public void handle(HttpExchange t) throws IOException {
+
+			String reqMethod = t.getRequestMethod();
+			String reqURI = t.getRequestURI().getPath().toString();
+			System.out.println("MyHandlerChallenge: reqMethod=" + reqMethod + " reqURI=" + reqURI);
+
+			if (reqMethod.equals("GET")&&reqURI.equals(challengeUrl)) {
+				System.out.println("MyHandlerChallenge: returning "+challengeUrl +" with content: "+challengeContent);
+
+				String message = challengeContent;
+				sendResponse(t, message);
+			}
+			else {
+				String message = "MyHandlerChallenge: not sure what you want by calling "+challengeUrl;
+				System.out.println(message);
+				sendResponse(t, message);
+			}
+
+		}
 	}
 
 

@@ -27,6 +27,7 @@ import javax.json.JsonReader;
 public class runACME {
 
 	public static int shutdownHttpPort = 5003;
+	public static int challengeHttpPort = 5002;
 	public static int certificateHttpsPort = 5001;
 	public static int dnsPort = 10053;
 
@@ -41,6 +42,9 @@ public class runACME {
 
 	public static String challengeType, dir, record, domain;
 	public static boolean revoke=false;
+	
+	public static DNSServer dnsServer;
+	public static HTTPServer challengeHttpsServer;
 	
 	private static void parseArguments(String[] args) {
 		//System.out.println("args.length: "+ args.length);
@@ -114,14 +118,16 @@ public class runACME {
 		System.out.println("Starting httpS-Dummy implementation....");
 		HTTPServer certificateHttpsServer = new HTTPServer(certificateHttpsPort, "cert");
 
-		//NotMyHTTPsServer certificateHttpsServer = new NotMyHTTPsServer();
-		//certificateHttpsServer.main(certificateHttpsPort, keystoreFullPath);
 
+		System.out.println("Starting http-Challenge-Server implementation....");
+		challengeHttpsServer = new HTTPServer(challengeHttpPort, "challenge");
+
+		
 
 		System.out.println("Starting DNS-Dummy implementation....");
-		DNSServer dnsServer = new DNSServer();
+		dnsServer = new DNSServer();
 		dnsServer.start();
-		dnsServer.createARecord("example.com");
+		//dnsServer.createARecord("example.com");
 
 
 

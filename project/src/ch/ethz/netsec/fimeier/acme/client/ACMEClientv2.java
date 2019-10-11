@@ -24,7 +24,6 @@ import java.util.Base64;
 import java.util.List;
 
 import javax.json.Json;
-import javax.json.JsonArray;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonObject;
 import javax.json.JsonReader;
@@ -63,6 +62,7 @@ public class ACMEClientv2 {
 	/*
 	 * State variable
 	 */
+	private Boolean isWildCard = false;
 	private String nonce;
 	private String orders;
 	private URL ordersURL;
@@ -90,6 +90,9 @@ public class ACMEClientv2 {
 
 
 
+	public String removeWildCard(String domain) {		
+		return domain.replace("*.", "");
+	}
 
 
 
@@ -434,19 +437,18 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	public ACMEClientv2(String _challengeType, String _dirUrl, String _recordIpForDomain, List<String> _domains, boolean _revoke) {
 
 		challengeType = _challengeType;
-		if (challengeType.equals("http01") && _domains.get(0).contains("*")) {
-			System.out.println("WILDCARD Certs have to use dns01 as challenge. Overridding setting!!!!!!!!");
+		if (_domains.get(0).contains("*")) {
+			System.out.println("WILDCARD Certs have to use dns01 as challenge. Overridding setting if it was http01!!!!!!!!");
 			challengeType = "dns01";
-			System.out.println("WILDCARD Certs not implemented...!!!!!!!!");
-			return;
-
+			isWildCard = true;
 		}
 		try {
 			dirUrl = new URL(_dirUrl);
 		} catch (MalformedURLException e1) {
 			// TODO Auto-generated catch block
 			e1.printStackTrace();
-		}
+		}		
+
 
 
 		try {
@@ -497,7 +499,9 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		postNewAccount();
 
 		postNewOrder();
-		
+
+
+
 		//postAsGetOrders();
 
 		postAsGetAuthorizationResources();
@@ -543,8 +547,8 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 
 		installCert();
-		
-		
+
+
 		if (revokeCertAfterObtained)
 			postRevokeCert();
 
@@ -948,7 +952,7 @@ Content-Type: application/jose+json
 		try {
 			URL resourceUrl = null;
 			String token = "";
-			
+
 			System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 1");
 
 			List<JsonValue> challengeJsonList = null;
@@ -959,19 +963,20 @@ Content-Type: application/jose+json
 
 			//we need for all domains an A record
 			for (String domain: domainList) {
-				runACME.dnsServer.createARecord(domain); //createARecord
+
+				runACME.dnsServer.createARecord(removeWildCard(domain)); //createARecord
 			}
-			
+
 			System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 2");
 
-			
+
 			int challengeNumber = 0;
 			for (JsonValue challenge: challengeJsonList) {
-				
+
 				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
 
-				String domain = domainList.get(challengeNumber);
-				
+				String domain = removeWildCard(domainList.get(challengeNumber));
+
 				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
 
 
@@ -981,7 +986,7 @@ Content-Type: application/jose+json
 				System.out.println("tokentokentokentokentokentokentoken="+token);
 				String thumbprint = getThumbPrint();
 				String keyAuthorization = token + '.' + thumbprint;
-				
+
 				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
 
 				if (challengeType.equals("dns01")){
@@ -1012,13 +1017,13 @@ Content-Type: application/jose+json
 					//2"create file on webserver" 
 					// .well-known/acme-challenge/ + Token
 					String filePath = "/.well-known/acme-challenge/" + token;
-//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
-//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
-//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+					//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+					//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+					//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
 
 					//setting for webserver webserver
-//					runACME.challengeHttpsServer.challengeUrl = filePath;
-//					runACME.challengeHttpsServer.challengeContent = keyAuthorization;
+					//					runACME.challengeHttpsServer.challengeUrl = filePath;
+					//					runACME.challengeHttpsServer.challengeContent = keyAuthorization;
 					runACME.challengeHttpsServer.challengeUrlContentMap.put(filePath, keyAuthorization);
 				}
 
@@ -1239,10 +1244,10 @@ certificate signing request these identifiers can appear.
 		runACME.certificateHttpsServer.server.stop(0);
 		runACME.certificateHttpsServer = new HTTPServer(runACME.certificateHttpsPort, "cert", certHelper);
 	}
-	
-	
-	
-/*
+
+
+
+	/*
 	Example using an account key pair for the signature:
 		POST /acme/revoke-cert HTTP/1.1
 		Host: example.com
@@ -1260,7 +1265,7 @@ certificate signing request these identifiers can appear.
 		}),
 		"signature": "Q1bURgJoEslbD1c5...3pYdSMLio57mQNN4"
 		}
-*/
+	 */
 	private void postRevokeCert() {
 		getANonce();
 
@@ -1275,7 +1280,7 @@ certificate signing request these identifiers can appear.
 					.add("certificate",Base64.getUrlEncoder().withoutPadding().encodeToString(certHelper.certificateDer))
 					.add("reason", 4)
 					.build();
-			
+
 			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
 
 			String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
@@ -1283,7 +1288,7 @@ certificate signing request these identifiers can appear.
 			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
 
 			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
-			
+
 			if (connectionACME.getResponseCode()==200) {
 				System.out.println("postRevokeCert(): Revoked Certificate succesfully!!!!!");
 			} else {
@@ -1292,7 +1297,7 @@ certificate signing request these identifiers can appear.
 				JsonObject responseJson = responseReader.readObject();
 				System.out.println("postRevokeCert(): "+responseJson);
 			}
-			
+
 		}
 		catch (Exception e) {
 			e.printStackTrace();

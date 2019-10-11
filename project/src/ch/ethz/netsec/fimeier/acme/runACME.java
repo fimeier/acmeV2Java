@@ -26,12 +26,12 @@ public class runACME {
 	public static List<String> domainList = new ArrayList<String>();
 	public static String challengeType, dir, record;
 	public static boolean revoke=false;
-	
+
 	public static DNSServer dnsServer;
 	public static HTTPServer challengeHttpsServer;
 	public static HTTPServer certificateHttpsServer;
-	
-	
+
+
 	private static void parseArguments(String[] args) {
 		//System.out.println("args.length: "+ args.length);
 		int i = 0;
@@ -80,8 +80,8 @@ public class runACME {
 
 
 	public static void main(String[] args) throws Exception {
-		
-			
+
+
 
 
 
@@ -110,7 +110,7 @@ public class runACME {
 		System.out.println("Starting http-Challenge-Server implementation....");
 		challengeHttpsServer = new HTTPServer(challengeHttpPort, "challenge");
 
-		
+
 
 		System.out.println("Starting DNS-Dummy implementation....");
 		dnsServer = new DNSServer();
@@ -142,7 +142,7 @@ public class runACME {
 
 		shutdownHttp.server.stop(0);
 		certificateHttpsServer.server.stop(0);
-		
+
 		//dnsServer.stop();
 
 		System.out.println("Everything closed!!! End of program....");

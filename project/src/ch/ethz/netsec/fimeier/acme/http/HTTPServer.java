@@ -283,12 +283,6 @@ public class HTTPServer {
 				sendResponse(t, message);
 				shutdowneverything = true;
 			}
-			else {
-				System.out.println("MyHandlerCert: not sure what you want... try http://localhost:5003/shutdown");
-				String message = "MyHandlerCert: not sure what you want... try http://localhost:5003/shutdown";
-				sendResponse(t, message);
-			}
-
 		}
 	}
 }

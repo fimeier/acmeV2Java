@@ -143,7 +143,7 @@ public class runACME {
 		shutdownHttp.server.stop(0);
 		certificateHttpsServer.server.stop(0);
 
-		//dnsServer.stop();
+		dnsServer.stop();
 
 		System.out.println("Everything closed!!! End of program....");
 

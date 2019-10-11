@@ -275,7 +275,14 @@ public class HTTPServer {
 
 				String message = "";
 				sendResponse(t, message);
-			} else if (reqMethod.equals("GET")&&reqURI.equals("/shutdown")) {
+			}
+			if (reqMethod.equals("HEAD")&&reqURI.equals("/")) {
+				System.out.println("MyHandlerCert: asking for /");
+
+				String message = "";
+				sendResponse(t, message);
+			}
+			if (reqMethod.equals("GET")&&reqURI.equals("/shutdown")) {
 				System.out.println("MyHandlerCert: setting shutdowneverything = true");
 
 				//send byebye...

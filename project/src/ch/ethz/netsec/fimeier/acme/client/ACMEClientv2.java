@@ -24,6 +24,8 @@ import java.util.Base64;
 import java.util.List;
 
 import javax.json.Json;
+import javax.json.JsonArray;
+import javax.json.JsonArrayBuilder;
 import javax.json.JsonObject;
 import javax.json.JsonReader;
 import javax.json.JsonValue;
@@ -36,14 +38,6 @@ import ch.ethz.netsec.fimeier.acme.http.HTTPServer;
 
 public class ACMEClientv2 {
 
-	//The acme-server's directory
-	//	private static Socket dirSocket = null;
-	//	private static PrintWriter dirSocketoutPrintWriter;
-	//	private static BufferedReader dirSocketinBufferedReader;
-
-
-	//private String myPrivateKeyForSigning = "MySupperSecretKeyForThisExercise";
-
 
 	/*
 	 * Startparameters (compare constructor)
@@ -51,7 +45,6 @@ public class ACMEClientv2 {
 	private String challengeType;
 	private URL dirUrl;
 	private InetAddress ipForDomain;
-	private String domain;
 	private List<String> domainList;
 	private boolean revokeCertAfterObtained;
 
@@ -76,8 +69,8 @@ public class ACMEClientv2 {
 	private String accountUrl;
 	private JsonObject orderObject;
 	private URL orderObjectLocation;
-	private JsonValue dnsChallengeJson;
-	private JsonValue httpChallengeJson;
+	private List<JsonValue> dnsChallengeJsonList;
+	private List <JsonValue> httpChallengeJsonList;
 	private Boolean readForFinalization = false;
 	private Boolean readForDownload = false;
 	private URL certDownloadUrl;
@@ -437,7 +430,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	 * required: String dirUrl, String recordIpForDomain, String domain
 	 * optional: revoke (Default should be false)
 	 */
-	public ACMEClientv2(String _challengeType, String _dirUrl, String _recordIpForDomain, String _domain, boolean _revoke) {
+	public ACMEClientv2(String _challengeType, String _dirUrl, String _recordIpForDomain, List<String> _domains, boolean _revoke) {
 
 		challengeType = _challengeType;
 		try {
@@ -456,10 +449,9 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		}
 
 		//TODO Decide what to do :-)
-		domain = _domain;
-
-		domainList = new ArrayList<String>();
-		domainList.add(domain);
+		domainList = _domains;
+		dnsChallengeJsonList = new ArrayList<JsonValue>();
+		httpChallengeJsonList = new ArrayList<JsonValue>();
 
 		revokeCertAfterObtained = _revoke;
 
@@ -728,11 +720,32 @@ Content-Type: application/jose+json
 
 
 			//payload
+
+			//String domain = domainList.get(0);
+
+
+			JsonArrayBuilder allDomainsJsonObject = Json.createArrayBuilder();
+
+			for (String domain: domainList) {
+				JsonObject ident = Json.createObjectBuilder().add("type","dns").add("value",domain).build();
+				allDomainsJsonObject.add(ident);
+
+			}
+
+			JsonArrayBuilder identifiersArray = Json.createArrayBuilder().addAll(allDomainsJsonObject);
+
 			JsonObject payloadPart = Json.createObjectBuilder()
-					.add("identifiers",Json.createArrayBuilder()
-							.add(Json.createObjectBuilder().add("type","dns").add("value",domain).build())
-							)
+					.add("identifiers",identifiersArray)
 					.build();
+
+
+
+
+			//			JsonObject payloadPart = Json.createObjectBuilder()
+			//					.add("identifiers",Json.createArrayBuilder()
+			//							.add(Json.createObjectBuilder().add("type","dns").add("value",domain).build())
+			//							)
+			//					.build();
 
 			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
 
@@ -779,53 +792,58 @@ Content-Type: application/jose+json
 
 			//ev mehrere Objekte im array
 
-			for (JsonValue a: orderObject.get("authorizations").asJsonArray()){
-				System.out.println("!!!!!authorizations-list"+a.toString());
-			}
+			for (JsonValue authJson: orderObject.get("authorizations").asJsonArray()){
+				//				System.out.println("!!!!!authorizations-list"+a.toString());
+				//			}
+				//
+				//			String authorizations = removeQuotes(orderObject.get("authorizations").asJsonArray().get(0).toString());
 
-			String authorizations = removeQuotes(orderObject.get("authorizations").asJsonArray().get(0).toString());
-			System.out.println("authorizations="+authorizations);
+				String authorizations = removeQuotes(authJson.toString());
+				System.out.println("authorizations="+authorizations);
 
-			URL resourceUrl = new URL(authorizations);
+				URL resourceUrl = new URL(authorizations);
 
 
-			HttpsURLConnection connectionACME = postAsGet(resourceUrl);
+				HttpsURLConnection connectionACME = postAsGet(resourceUrl);
 
-			JsonObject responseJson = parseResponseIntoJson(connectionACME);
+				JsonObject responseJson = parseResponseIntoJson(connectionACME);
 
-			System.out.println("postAsGetAuthorizationResources(): "+responseJson);
+				System.out.println("postAsGetAuthorizationResources(): "+responseJson);
 
-			/*
-			 * 			postAsGetAuthorizationResources(): 
-			 * {"status":"pending",
-			 * "identifier":{"type":"dns","value":"example.com"},
-			 * "challenges":[
-			 * {"type":"tls-alpn-01","url":"https://127.0.0.1:14000/chalZ/JVe6-qnooSHWbdl0o4O3DvSFG62O5PIoAo6HlJPX4pE",
-			 * 					"token":"CKYuYVcX2j-ATEwoY7IiWdXHm5-kXoWGtMBKxxA4-2k","status":"pending"},
-			 * {"type":"dns-01","url":"https://127.0.0.1:14000/chalZ/dysNT8Xho1TiVLDczijJwCjY2EvRny30xvpz_a3tx7c",
-			 * 					"token":"ppRMzz1zMEyICBoubIxGl84IUuWShyjZdwi5-RNpvIo","status":"pending"},
-			 * {"type":"http-01","url":"https://127.0.0.1:14000/chalZ/9b-9q8vsMp7_d2kQSGhwt1S7V69eNlcfHjgZpneK-X8",
-			 * 					"token":"ndUIWzdV3JZRfyOxE2j995vPuZWsEerbyEffEdPX4rE","status":"pending"}],
-			 * "expires":"2019-10-09T13:14:13Z"}
-			 * 
-			 */
+				/*
+				 * 			postAsGetAuthorizationResources(): 
+				 * {"status":"pending",
+				 * "identifier":{"type":"dns","value":"example.com"},
+				 * "challenges":[
+				 * {"type":"tls-alpn-01","url":"https://127.0.0.1:14000/chalZ/JVe6-qnooSHWbdl0o4O3DvSFG62O5PIoAo6HlJPX4pE",
+				 * 					"token":"CKYuYVcX2j-ATEwoY7IiWdXHm5-kXoWGtMBKxxA4-2k","status":"pending"},
+				 * {"type":"dns-01","url":"https://127.0.0.1:14000/chalZ/dysNT8Xho1TiVLDczijJwCjY2EvRny30xvpz_a3tx7c",
+				 * 					"token":"ppRMzz1zMEyICBoubIxGl84IUuWShyjZdwi5-RNpvIo","status":"pending"},
+				 * {"type":"http-01","url":"https://127.0.0.1:14000/chalZ/9b-9q8vsMp7_d2kQSGhwt1S7V69eNlcfHjgZpneK-X8",
+				 * 					"token":"ndUIWzdV3JZRfyOxE2j995vPuZWsEerbyEffEdPX4rE","status":"pending"}],
+				 * "expires":"2019-10-09T13:14:13Z"}
+				 * 
+				 */
 
-			for (JsonValue challenge: responseJson.get("challenges").asJsonArray()) {
+				for (JsonValue challenge: responseJson.get("challenges").asJsonArray()) {
 
-				System.out.println("type="+((JsonObject) challenge).get("type").toString());
+					System.out.println("type="+((JsonObject) challenge).get("type").toString());
 
-				if ( ((JsonObject) challenge).get("type").toString().equals("\"http-01\"") ){
-					System.out.println("found challenge= "+challenge);
-					httpChallengeJson = challenge;
+					if ( ((JsonObject) challenge).get("type").toString().equals("\"http-01\"") ){
+						System.out.println("found challenge= "+challenge);
+						JsonValue httpChallengeJson = challenge;
+						httpChallengeJsonList.add(httpChallengeJson);
+					}
+
+					if ( ((JsonObject) challenge).get("type").toString().equals("\"dns-01\"") ){
+						System.out.println("found challenge= "+challenge);
+						JsonValue dnsChallengeJson = challenge;
+						dnsChallengeJsonList.add(dnsChallengeJson);
+					}
+
 				}
 
-				if ( ((JsonObject) challenge).get("type").toString().equals("\"dns-01\"") ){
-					System.out.println("found challenge= "+challenge);
-					dnsChallengeJson = challenge;
-				}
-
 			}
-
 
 
 
@@ -919,122 +937,81 @@ Content-Type: application/jose+json
 			URL resourceUrl = null;
 			String token = "";
 
-			if (challengeType.equals("dns01")){
-				//{"type":"dns-01"
-				//	,"url":"https://127.0.0.1:14000/chalZ/dysNT8Xho1TiVLDczijJwCjY2EvRny30xvpz_a3tx7c"
-				//	,"token":"ppRMzz1zMEyICBoubIxGl84IUuWShyjZdwi5-RNpvIo"
-				//	,"status":"pending"},
+			List<JsonValue> challengeJsonList = null;
+			if (challengeType.equals("dns01"))
+				challengeJsonList = dnsChallengeJsonList;
+			if (challengeType.equals("http01"))
+				challengeJsonList = httpChallengeJsonList;
 
-				String challengeUrlAsString = removeQuotes(dnsChallengeJson.asJsonObject().get("url").toString());
-				System.out.println("dns01-challengeUrlAsString="+challengeUrlAsString);
+			//we need for all domains an A record
+			for (String domain: domainList) {
+				runACME.dnsServer.createARecord(domain); //createARecord
+			}
+
+			int challengeNumber = 0;
+			for (JsonValue challenge: challengeJsonList) {
+				String domain = domainList.get(challengeNumber);
+
+				String challengeUrlAsString = removeQuotes(challenge.asJsonObject().get("url").toString());
 				resourceUrl = new URL(challengeUrlAsString);
-
-				token = removeQuotes(dnsChallengeJson.asJsonObject().get("token").toString());
-
-				System.out.println("tokentokentokentokentokentokentoken="+token);
-
-				/*
-				 * TODO fullfill challenge
-				 */
-
-				//prepare dns-record
-
-				//keyAuthorization = token || ’.’ || base64url(Thumbprint(accountKey))
+				token = removeQuotes(challenge.asJsonObject().get("token").toString());
+				//System.out.println("tokentokentokentokentokentokentoken="+token);
 				String thumbprint = getThumbPrint();
-
-
-				//byte[] sha256hash(String z) {				 
-				//				getAuthorization() = getToken() + '.' + base64UrlEncode(JoseUtils.thumbprint(pk))
-				//					MessageDigest md = MessageDigest.getInstance("SHA-256");
-				//			            md.update(z.getBytes("UTF-8"));
-				//			            return md.digest();
-				//					}
-				//			            
-				//				getDigest() = base64UrlEncode(sha256hash(getAuthorization()));
-				//
-
 				String keyAuthorization = token + '.' + thumbprint;
 
-				//String hashOfKeyAuthorization = base64UrlEncode(sha256hash(keyAuthorization));
-				String hashOfKeyAuthorization = getSHA256AsString(keyAuthorization);
-				System.out.println("fullfillChallenge(): keyAuthorization ="+keyAuthorization);
-				System.out.println("fullfillChallenge(): keyAuthorization2="+hashOfKeyAuthorization);
+				if (challengeType.equals("dns01")){
+					System.out.println("dns01-challengeUrlAsString="+challengeUrlAsString);
 
 
-				////FUCK it!!!!!! double sha...
+					String hashOfKeyAuthorization = getSHA256AsString(keyAuthorization);
+					//					System.out.println("fullfillChallenge(): keyAuthorization ="+keyAuthorization);
+					//					System.out.println("fullfillChallenge(): keyAuthorization2="+hashOfKeyAuthorization);
+
+					//for (String domain: domainList) {
+					String challengeDomain = "_acme-challenge."+domain;
+					runACME.dnsServer.createTxtRecord(challengeDomain, hashOfKeyAuthorization);
+					//}
+
+				} 
 
 
-				//ExpectedKeyAuthorization=6H1pM_1in6MeDeXH59Rwf28450HLEgj2dD_2AL6e8yQ.sUtL3AfqVZE_C-BvcNq1Y9EqmQBLBx6YkBBYbNhJwtY
-				//						  "6H1pM_1in6MeDeXH59Rwf28450HLEgj2dD_2AL6e8yQ.sUtL3AfqVZE_C-BvcNq1Y9EqmQBLBx6YkBBYbNhJwtY"
-
-				//_acme-challenge.www.example.org. 300 IN TXT "gfj9Xq...Rg85nM"
-
-				// domäne mit oder ohne punkt????
-				String challengeDomain = "_acme-challenge."+domain;
-
-				runACME.dnsServer.createARecord(domain); //createTxtRecord
-
-				runACME.dnsServer.createTxtRecord(challengeDomain, hashOfKeyAuthorization); //createTxtRecord
-
-			} 
-
-
-			//resourceUrl = new URL()
-
-			if (challengeType.equals("http01")){
-				/*
-				 * The path at which the resource is provisioned is comprised of the
+				if (challengeType.equals("http01")){
+					System.out.println("http01-challengeUrlAsString="+challengeUrlAsString);
+					/*
+					 * The path at which the resource is provisioned is comprised of the
 					fixed prefix "/.well-known/acme-challenge/", followed by the "token"
 					value in the challenge. The value of the resource MUST be the ASCII
 					representation of the key authorization.
-				 */
-				//  http://example.com:5002/.well-known/acme-challenge/GDO0gPJA9RKoC1KRg8BPMz5FzOnjm5d2skz3eTFh2cY
-				String challengeUrlAsString = removeQuotes(httpChallengeJson.asJsonObject().get("url").toString());
-				System.out.println("http01-challengeUrlAsString="+challengeUrlAsString);
-				resourceUrl = new URL(challengeUrlAsString);
+					 */
 
-				/*
-				 * TODO fullfill challenge
-				 */
+					//2"create file on webserver" 
+					// .well-known/acme-challenge/ + Token
+					String filePath = "/.well-known/acme-challenge/" + token;
+//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
 
-				//1 create dns to find http server
-				runACME.dnsServer.createARecord(domain); //createTxtRecord
-				//2"create file on webserver" 
-				// .well-known/acme-challenge/ + Token
-				token = removeQuotes(httpChallengeJson.asJsonObject().get("token").toString());
-				String filePath = "/.well-known/acme-challenge/" + token;
-				System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
-				System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
-				System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+					//setting for webserver webserver
+//					runACME.challengeHttpsServer.challengeUrl = filePath;
+//					runACME.challengeHttpsServer.challengeContent = keyAuthorization;
+					runACME.challengeHttpsServer.challengeUrlContentMap.put(filePath, keyAuthorization);
+				}
 
-				//3 create content for that file the key keyAuthorization
-				String thumbprint = getThumbPrint();
-				String keyAuthorization = token + '.' + thumbprint;
+				//payload ist "{}" <-FUCK YOU ACME...... 5h FUCK!!!! why not ""???? Fuck rfc... :-)
+				JsonObject protectedPart = createProtectedPartKid(resourceUrl);
 
-				//setting webserver
-				runACME.challengeHttpsServer.challengeUrl = filePath;
-				runACME.challengeHttpsServer.challengeContent = keyAuthorization;
+				String signatureAsString = getSignatureAsString(protectedPart.toString(),"{}");
 
+				byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), "{}", signatureAsString);
 
+				HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
+
+				JsonObject responseJson = parseResponseIntoJson(connectionACME);
+
+				System.out.println("fullfillChallenge(): "+responseJson);
+
+				challengeNumber++;
 			}
-
-			//test
-			//payload ist "{}" <-FUCK YOU ACME...... 5h FUCK!!!! why not ""???? Fuck rfc... :-)
-			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
-
-			String signatureAsString = getSignatureAsString(protectedPart.toString(),"{}");
-
-			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), "{}", signatureAsString);
-
-			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
-
-			JsonObject responseJson = parseResponseIntoJson(connectionACME);
-
-			System.out.println("fullfillChallenge(): "+responseJson);
-
-
-
-
 		}
 		catch (MalformedURLException e) {
 			// TODO Auto-generated catch block

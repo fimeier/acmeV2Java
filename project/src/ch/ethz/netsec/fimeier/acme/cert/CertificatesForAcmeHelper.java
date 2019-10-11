@@ -139,6 +139,7 @@ public class CertificatesForAcmeHelper {
 					nameBuilder.addRDN(BCStyle.CN, domainAsASCII);
 				//all domains are added as SAN
 				sanList[i] = new GeneralName(GeneralName.dNSName, domainAsASCII);
+				i++;
 			}
 		
 			GeneralNames subjectAlternativeName = new GeneralNames(sanList);

@@ -9,6 +9,7 @@ import java.net.InetSocketAddress;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
+import java.util.HashMap;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -42,8 +43,9 @@ public class HTTPServer {
 	 * State Variables
 	 */
 	//change this to a list/hashmap if needed
-	public String challengeUrl;
-	public String challengeContent;
+	public HashMap<String, String> challengeUrlContentMap = new HashMap<String, String>();
+	//public String challengeUrl;
+	//public String challengeContent;
 
 	/*
 	 * state for cert https
@@ -56,18 +58,18 @@ public class HTTPServer {
 	public HTTPServer(int port, String mode, CertificatesForAcmeHelper _certHelper) throws Exception {
 
 		this.certHelper = _certHelper;
-		
+
 		this.serverPort = port;
 		this.mode = mode;
-		
+
 		/*
 		 * set fields for cert https
 		 */
 		keySize = certHelper.keySize;
 		keyGen = certHelper.keyGen;
 		keyPairForCerts = certHelper.keyPairForCerts;
-		
-		
+
+
 		//SSLContext sslContext = SSLContext.getInstance("TLS");
 		SSLContext sslContext = certHelper.createSslContext();
 		server = HttpsServer.create(new InetSocketAddress(this.serverPort), 0);
@@ -93,9 +95,9 @@ public class HTTPServer {
 				}
 			}
 		});
-		
-		
-		
+
+
+
 		server.createContext("/", new MyHandlerCert());
 		server.setExecutor(null); // creates a default executor
 		server.start();
@@ -191,11 +193,15 @@ public class HTTPServer {
 	public void sendResponse(HttpExchange t, String message) throws IOException {
 		String response = message;
 
-		byte[] resp = response.getBytes();
-		t.sendResponseHeaders(200, resp.length);
-		OutputStream os = t.getResponseBody();
-		os.write(resp);
-		os.close();
+		if (message.equals("")) {
+			t.sendResponseHeaders(200, -1);
+		} else {
+			byte[] resp = response.getBytes();
+			t.sendResponseHeaders(200, resp.length);
+			OutputStream os = t.getResponseBody();
+			os.write(resp);
+			os.close();
+		}
 	}
 
 
@@ -207,10 +213,16 @@ public class HTTPServer {
 			String reqURI = t.getRequestURI().getPath().toString();
 			System.out.println("MyHandlerChallenge: reqMethod=" + reqMethod + " reqURI=" + reqURI);
 
-			if (reqMethod.equals("GET")&&reqURI.equals(challengeUrl)) {
+			String challengeUrl = "";
+			String challengeContent = "";
+			//	challengeUrlContentMap.put(filePath, keyAuthorization)
+			if (reqMethod.equals("GET")&& challengeUrlContentMap.containsKey(reqURI)) {
+				//if (reqMethod.equals("GET")&&reqURI.equals(challengeUrl)) {
+				//String message = challengeContent;
+
+				String message = challengeUrlContentMap.get(reqURI);
 				System.out.println("MyHandlerChallenge: returning "+challengeUrl +" with content: "+challengeContent);
 
-				String message = challengeContent;
 				sendResponse(t, message);
 			}
 			else {
@@ -258,7 +270,12 @@ public class HTTPServer {
 			String reqURI = t.getRequestURI().getPath().toString();
 			System.out.println("MyHandlerCert: reqMethod=" + reqMethod + " reqURI=" + reqURI);
 
-			if (reqMethod.equals("GET")&&reqURI.equals("/shutdown")) {
+			if (reqMethod.equals("GET")&&reqURI.equals("/")) {
+				System.out.println("MyHandlerCert: asking for /");
+
+				String message = "";
+				sendResponse(t, message);
+			} else if (reqMethod.equals("GET")&&reqURI.equals("/shutdown")) {
 				System.out.println("MyHandlerCert: setting shutdowneverything = true");
 
 				//send byebye...

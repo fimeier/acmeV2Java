@@ -1,5 +1,8 @@
 package ch.ethz.netsec.fimeier.acme;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import ch.ethz.netsec.fimeier.acme.client.ACMEClientv2;
 import ch.ethz.netsec.fimeier.acme.dns.DNSServer;
 import ch.ethz.netsec.fimeier.acme.http.HTTPServer;
@@ -20,7 +23,8 @@ public class runACME {
 	public static String keystoreFullPath = "certificates/testfolder/keystore.jks";
 
 
-	public static String challengeType, dir, record, domain;
+	public static List<String> domainList = new ArrayList<String>();
+	public static String challengeType, dir, record;
 	public static boolean revoke=false;
 	
 	public static DNSServer dnsServer;
@@ -53,7 +57,8 @@ public class runACME {
 					break;
 				}
 				case "--domain":{
-					domain = args[i+1];
+					String domain = args[i+1];
+					domainList.add(domain);
 					System.out.println("domain: "+domain);
 					break;
 				}
@@ -115,7 +120,7 @@ public class runACME {
 
 
 		System.out.println("Starting ACME-Client....");
-		ACMEClientv2 acmeclient = new ACMEClientv2(challengeType, dir, record, domain, revoke);
+		ACMEClientv2 acmeclient = new ACMEClientv2(challengeType, dir, record, domainList, revoke);
 		acmeclient.start();
 
 

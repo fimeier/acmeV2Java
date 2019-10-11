@@ -520,7 +520,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		//			e.printStackTrace();
 		//		}
 		try {
-			Thread.currentThread().sleep(5000);
+			Thread.currentThread().sleep(10000);
 
 
 		} catch (InterruptedException e) {

@@ -521,7 +521,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		//		}
 		System.out.println("sleeping for 60 seconds.....");
 		try {
-			Thread.currentThread().sleep(60000);
+			Thread.currentThread().sleep(30000);
 
 
 		} catch (InterruptedException e) {

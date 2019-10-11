@@ -71,6 +71,7 @@ public class ACMEClientv2 {
 	private URL orderObjectLocation;
 	private List<JsonValue> dnsChallengeJsonList;
 	private List <JsonValue> httpChallengeJsonList;
+	private List <String> domainsSortedForChallenges;
 	private Boolean readForFinalization = false;
 	private Boolean readForDownload = false;
 	private URL certDownloadUrl;
@@ -437,10 +438,12 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	public ACMEClientv2(String _challengeType, String _dirUrl, String _recordIpForDomain, List<String> _domains, boolean _revoke) {
 
 		challengeType = _challengeType;
-		if (_domains.get(0).contains("*")) {
-			System.out.println("WILDCARD Certs have to use dns01 as challenge. Overridding setting if it was http01!!!!!!!!");
-			challengeType = "dns01";
-			isWildCard = true;
+		for (String dom: _domains) {
+			if (dom.contains("*")) {
+				System.out.println("WILDCARD Certs have to use dns01 as challenge. Overridding setting if it was http01!!!!!!!!");
+				challengeType = "dns01";
+				isWildCard = true;
+			}
 		}
 		try {
 			dirUrl = new URL(_dirUrl);
@@ -462,6 +465,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		domainList = _domains;
 		dnsChallengeJsonList = new ArrayList<JsonValue>();
 		httpChallengeJsonList = new ArrayList<JsonValue>();
+		domainsSortedForChallenges = new ArrayList<String>();
 
 		revokeCertAfterObtained = _revoke;
 
@@ -826,7 +830,7 @@ Content-Type: application/jose+json
 
 				JsonObject responseJson = parseResponseIntoJson(connectionACME);
 
-				System.out.println("postAsGetAuthorizationResources(): "+responseJson);
+				System.out.println("postAsGetAuthorizationResources() !!!!!!!! : "+responseJson);
 
 				/*
 				 * 			postAsGetAuthorizationResources(): 
@@ -843,6 +847,10 @@ Content-Type: application/jose+json
 				 * 
 				 */
 
+				//ultra ugly
+				String domain = responseJson.asJsonObject().get("identifier").asJsonObject().get("value").toString();
+				domainsSortedForChallenges.add(removeQuotes(domain));
+				
 				for (JsonValue challenge: responseJson.get("challenges").asJsonArray()) {
 
 					System.out.println("type="+((JsonObject) challenge).get("type").toString());
@@ -978,9 +986,10 @@ Content-Type: application/jose+json
 
 				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
 
-				String domain = removeWildCard(domainList.get(challengeNumber));
-
-				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
+				//sortierung stimmt so nicht
+				//String domain = removeWildCard(domainList.get(challengeNumber));
+				String domain = removeWildCard(domainsSortedForChallenges.get(challengeNumber));
+				System.out.println("domaindomaindomaindomaindomain = "+domain);
 
 
 				String challengeUrlAsString = removeQuotes(challenge.asJsonObject().get("url").toString());

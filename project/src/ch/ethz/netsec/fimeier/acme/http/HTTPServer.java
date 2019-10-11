@@ -275,12 +275,14 @@ public class HTTPServer {
 
 				String message = "";
 				sendResponse(t, message);
+				return;
 			}
 			if (reqMethod.equals("HEAD")&&reqURI.equals("/")) {
 				System.out.println("MyHandlerCert: asking for /");
 
 				String message = "";
 				sendResponse(t, message);
+				return;
 			}
 			if (reqMethod.equals("GET")&&reqURI.equals("/shutdown")) {
 				System.out.println("MyHandlerCert: setting shutdowneverything = true");
@@ -289,7 +291,13 @@ public class HTTPServer {
 				String message = "Byebye...";
 				sendResponse(t, message);
 				shutdowneverything = true;
+				return;
+			} else {
+				System.out.println("MyHandlerShutdown: not sure what you want...");
+				String message = "MyHandlerShutdown: not sure what you want...";
+				sendResponse(t, message);
 			}
+			
 		}
 	}
 }

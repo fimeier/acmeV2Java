@@ -519,14 +519,17 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		//			// TODO Auto-generated catch block
 		//			e.printStackTrace();
 		//		}
+		System.out.println("sleeping for 60 seconds.....");
 		try {
-			Thread.currentThread().sleep(20000);
+			Thread.currentThread().sleep(60000);
 
 
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		System.out.println("fertig sleeping for 60 seconds.....");
+
 
 
 		finalizeNewOrder();

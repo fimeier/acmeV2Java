@@ -433,6 +433,13 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	public ACMEClientv2(String _challengeType, String _dirUrl, String _recordIpForDomain, List<String> _domains, boolean _revoke) {
 
 		challengeType = _challengeType;
+		if (challengeType.equals("http01") && _domains.get(0).contains("*")) {
+			System.out.println("WILDCARD Certs have to use dns01 as challenge. Overridding setting!!!!!!!!");
+			challengeType = "dns01";
+			System.out.println("WILDCARD Certs not implemented...!!!!!!!!");
+			return;
+
+		}
 		try {
 			dirUrl = new URL(_dirUrl);
 		} catch (MalformedURLException e1) {
@@ -488,9 +495,8 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 		postNewAccount();
 
-
 		postNewOrder();
-
+		
 		//postAsGetOrders();
 
 		postAsGetAuthorizationResources();
@@ -931,11 +937,14 @@ Content-Type: application/jose+json
 	}
 
 	public void fullfillChallenge() {
+		System.out.println("fullfillChallenge(): starting...");
 		getANonce();
 
 		try {
 			URL resourceUrl = null;
 			String token = "";
+			
+			System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 1");
 
 			List<JsonValue> challengeJsonList = null;
 			if (challengeType.equals("dns01"))
@@ -947,17 +956,28 @@ Content-Type: application/jose+json
 			for (String domain: domainList) {
 				runACME.dnsServer.createARecord(domain); //createARecord
 			}
+			
+			System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 2");
 
+			
 			int challengeNumber = 0;
 			for (JsonValue challenge: challengeJsonList) {
+				
+				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
+
 				String domain = domainList.get(challengeNumber);
+				
+				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
+
 
 				String challengeUrlAsString = removeQuotes(challenge.asJsonObject().get("url").toString());
 				resourceUrl = new URL(challengeUrlAsString);
 				token = removeQuotes(challenge.asJsonObject().get("token").toString());
-				//System.out.println("tokentokentokentokentokentokentoken="+token);
+				System.out.println("tokentokentokentokentokentokentoken="+token);
 				String thumbprint = getThumbPrint();
 				String keyAuthorization = token + '.' + thumbprint;
+				
+				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
 
 				if (challengeType.equals("dns01")){
 					System.out.println("dns01-challengeUrlAsString="+challengeUrlAsString);
@@ -1013,7 +1033,7 @@ Content-Type: application/jose+json
 				challengeNumber++;
 			}
 		}
-		catch (MalformedURLException e) {
+		catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}

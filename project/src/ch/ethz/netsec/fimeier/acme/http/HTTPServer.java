@@ -6,6 +6,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 
 import javax.net.ssl.KeyManagerFactory;
@@ -22,6 +24,7 @@ import com.sun.net.httpserver.HttpsParameters;
 import com.sun.net.httpserver.HttpsServer;
 
 import ch.ethz.netsec.fimeier.acme.runACME;
+import ch.ethz.netsec.fimeier.acme.cert.CertificatesForAcmeHelper;
 
 
 public class HTTPServer {
@@ -33,8 +36,8 @@ public class HTTPServer {
 	private int serverPort = 8000;
 
 	private String mode = "";
-	
-	
+
+
 	/*
 	 * State Variables
 	 */
@@ -42,7 +45,63 @@ public class HTTPServer {
 	public String challengeUrl;
 	public String challengeContent;
 
+	/*
+	 * state for cert https
+	 */
+	private CertificatesForAcmeHelper certHelper;
+	public int keySize;
+	public KeyPairGenerator keyGen;
+	public KeyPair keyPairForCerts;
 
+	public HTTPServer(int port, String mode, CertificatesForAcmeHelper _certHelper) throws Exception {
+
+		this.certHelper = _certHelper;
+		
+		this.serverPort = port;
+		this.mode = mode;
+		
+		/*
+		 * set fields for cert https
+		 */
+		keySize = certHelper.keySize;
+		keyGen = certHelper.keyGen;
+		keyPairForCerts = certHelper.keyPairForCerts;
+		
+		
+		//SSLContext sslContext = SSLContext.getInstance("TLS");
+		SSLContext sslContext = certHelper.createSslContext();
+		server = HttpsServer.create(new InetSocketAddress(this.serverPort), 0);
+
+		((HttpsServer) server).setHttpsConfigurator(new HttpsConfigurator(sslContext) {
+			@Override
+			public void configure(HttpsParameters params) {
+				try {
+					// initialise the SSL context
+					SSLContext c = getSSLContext();
+					SSLEngine engine = c.createSSLEngine();
+					params.setNeedClientAuth(false);
+					params.setCipherSuites(engine.getEnabledCipherSuites());
+					params.setProtocols(engine.getEnabledProtocols());
+
+					// Set the SSL parameters
+					SSLParameters sslParameters = c.getSupportedSSLParameters();
+					params.setSSLParameters(sslParameters);
+
+				} catch (Exception ex) {
+					System.out.println("Failed to create HTTPS port");
+					System.out.println(ex.getMessage());
+				}
+			}
+		});
+		
+		
+		
+		server.createContext("/", new MyHandlerCert());
+		server.setExecutor(null); // creates a default executor
+		server.start();
+	}
+
+	//for cert mode: loads always the same locally signed cert
 	public HTTPServer(int port, String mode) throws Exception {
 
 		this.serverPort = port;

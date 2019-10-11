@@ -1,28 +1,8 @@
 package ch.ethz.netsec.fimeier.acme;
 
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
-
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLSocketFactory;
-
 import ch.ethz.netsec.fimeier.acme.client.ACMEClientv2;
 import ch.ethz.netsec.fimeier.acme.dns.DNSServer;
 import ch.ethz.netsec.fimeier.acme.http.HTTPServer;
-
-import javax.json.Json;
-import javax.json.JsonArray;
-import javax.json.JsonObject;
-import javax.json.JsonReader;
 
 public class runACME {
 
@@ -45,6 +25,8 @@ public class runACME {
 	
 	public static DNSServer dnsServer;
 	public static HTTPServer challengeHttpsServer;
+	public static HTTPServer certificateHttpsServer;
+	
 	
 	private static void parseArguments(String[] args) {
 		//System.out.println("args.length: "+ args.length);
@@ -93,6 +75,8 @@ public class runACME {
 
 
 	public static void main(String[] args) throws Exception {
+		
+			
 
 
 
@@ -114,9 +98,8 @@ public class runACME {
 		HTTPServer shutdownHttp = new HTTPServer(shutdownHttpPort, "shutdown");
 
 
-
 		System.out.println("Starting httpS-Dummy implementation....");
-		HTTPServer certificateHttpsServer = new HTTPServer(certificateHttpsPort, "cert");
+		certificateHttpsServer = new HTTPServer(certificateHttpsPort, "cert");
 
 
 		System.out.println("Starting http-Challenge-Server implementation....");

@@ -21,7 +21,6 @@ import java.security.Signature;
 import java.security.interfaces.RSAPublicKey;
 import java.util.ArrayList;
 import java.util.Base64;
-//import org.apache.commons.codec.binary.Hex;
 import java.util.List;
 
 import javax.json.Json;
@@ -30,8 +29,9 @@ import javax.json.JsonReader;
 import javax.json.JsonValue;
 import javax.net.ssl.HttpsURLConnection;
 
-
 import ch.ethz.netsec.fimeier.acme.runACME;
+import ch.ethz.netsec.fimeier.acme.cert.CertificatesForAcmeHelper;
+import ch.ethz.netsec.fimeier.acme.http.HTTPServer;
 
 
 public class ACMEClientv2 {
@@ -52,6 +52,7 @@ public class ACMEClientv2 {
 	private URL dirUrl;
 	private InetAddress ipForDomain;
 	private String domain;
+	private List<String> domainList;
 	private boolean revokeCertAfterObtained;
 
 	/*
@@ -78,6 +79,9 @@ public class ACMEClientv2 {
 	private JsonValue dnsChallengeJson;
 	private JsonValue httpChallengeJson;
 	private Boolean readForFinalization = false;
+	private Boolean readForDownload = false;
+	private URL certDownloadUrl;
+	String certificatePem;
 
 	/*
 	 * Crypto stuff
@@ -85,6 +89,12 @@ public class ACMEClientv2 {
 	private int keySize;
 	private KeyPairGenerator keyGen;
 	private KeyPair keyPair;
+
+	/*
+	 * Cert stuff
+	 */
+	private CertificatesForAcmeHelper certHelper;
+
 
 
 
@@ -219,24 +229,34 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 
 				HttpsURLConnection newACMEConnection = (HttpsURLConnection) resourceUrl.openConnection();
-				newACMEConnection.setRequestMethod(mode);
+
+				if (mode.equals("downloadCert")) {
+					newACMEConnection.setRequestMethod("POST");
+					newACMEConnection.setFixedLengthStreamingMode(bytesToPutOnWire.length);
+					newACMEConnection.setRequestProperty("Accept", "application/pem-certificate-chain");
+					newACMEConnection.setDoOutput(true);
+				}
 
 				if (mode.equals("POST")) {
+					newACMEConnection.setRequestMethod(mode);
 					newACMEConnection.setFixedLengthStreamingMode(bytesToPutOnWire.length);
+					newACMEConnection.setRequestProperty("Accept", "application/json");
+					newACMEConnection.setDoOutput(true);
 				}
+
 				if (mode.equals("GET")) {
-					//tbd
+					newACMEConnection.setRequestMethod(mode);
+					newACMEConnection.setRequestProperty("Accept", "application/json");
 				}
-				newACMEConnection.setRequestProperty("Accept", "application/json");
+
+				newACMEConnection.setRequestProperty("Content-Type","application/jose+json");
 				newACMEConnection.setRequestProperty("charset", "utf-8");
 				newACMEConnection.setRequestProperty("Accept-Language", "en");
-				newACMEConnection.setRequestProperty("Content-Type","application/jose+json");
-				newACMEConnection.setDoOutput(true);
 
 				newACMEConnection.connect();
 
 
-				if (mode.equals("POST")) {
+				if (mode.equals("POST") || mode.equals("downloadCert")) {
 					OutputStream outputStream = newACMEConnection.getOutputStream();
 					outputStream.write(bytesToPutOnWire);
 					outputStream.flush();
@@ -248,6 +268,13 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 				newACMEConnection.getHeaderFields().forEach((key, headers) -> headers.forEach(value ->
 				System.out.println("HEADER-DEBUGGIN "+key+":"+value)));
 
+
+				//special case for cert download???
+				if (mode.equals("downloadCert")) {
+					return newACMEConnection;
+				}
+
+				//TODO ANPASSEN
 				if (newACMEConnection.getResponseCode()==400 || newACMEConnection.getResponseCode()==403) {
 					System.out.println("------------------HTTP 400||403-----------------------");
 					BufferedReader errorStream = new BufferedReader(new InputStreamReader(newACMEConnection.getErrorStream()));
@@ -378,10 +405,9 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 	}
 
-	public HttpsURLConnection postAsGet(URL resourceUrl) {
-
+	//downloadCert
+	public HttpsURLConnection postAsGetMode(URL resourceUrl, String mode) {
 		try {
-			//URL resourceUrl = ordersURL;
 
 			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
 
@@ -389,7 +415,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), "", signatureAsString);
 
-			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
+			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, mode);
 
 			return connectionACME;
 
@@ -398,6 +424,11 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 			e.printStackTrace();
 		}
 		return null;
+	}
+
+	public HttpsURLConnection postAsGet(URL resourceUrl) {
+		return postAsGetMode(resourceUrl, "POST");
+
 	}
 
 
@@ -427,6 +458,9 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		//TODO Decide what to do :-)
 		domain = _domain;
 
+		domainList = new ArrayList<String>();
+		domainList.add(domain);
+
 		revokeCertAfterObtained = _revoke;
 
 
@@ -444,9 +478,15 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 			// TODO: handle exception
 			e.printStackTrace();
 		}
+
+		/*
+		 * cert stuff
+		 */
+		certHelper = new CertificatesForAcmeHelper();
+
 	}
 
-	public void start() {
+	public void start() throws Exception {
 
 		getDirectory();
 
@@ -476,15 +516,44 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		//			// TODO Auto-generated catch block
 		//			e.printStackTrace();
 		//		}
+		try {
+			Thread.currentThread().sleep(5000);
 
 
-		//finalizeNewOrder();
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+
+		finalizeNewOrder();
+
+		try {
+			Thread.currentThread().sleep(5000);
+
+
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		postAsGetOrderStatus();
+
+
+		postAsGetDownloadCert();
+
+
+		installCert();
+
+
 
 
 
 		//Not needed helpers
 		//allready received in postNewOrder().. but usefull if "lost"
-		postAsGetOrders();
+		//postAsGetOrders();
+
+
 
 
 
@@ -580,6 +649,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 
 	private void postNewAccount() {
+		getANonce();
 
 		try {
 			List<URI> contacts = new ArrayList<>(); 
@@ -650,6 +720,7 @@ Content-Type: application/jose+json
 }
 	 */
 	private void postNewOrder() {
+		getANonce();
 
 		try {
 
@@ -702,6 +773,7 @@ Content-Type: application/jose+json
 
 	 */
 	private void postAsGetAuthorizationResources() {
+		getANonce();
 
 		try {
 
@@ -775,7 +847,7 @@ Content-Type: application/jose+json
 		}
 		return thumbprintAsBytes;
 	}
-	
+
 	public String getSHA256AsString(String toHashedString) {
 		String thumbprint = Base64.getUrlEncoder().withoutPadding().encodeToString(getSHA256AsBytes(toHashedString));
 		return thumbprint;
@@ -792,18 +864,18 @@ Content-Type: application/jose+json
 			String jkwAsString = createJwk().toString();
 			//n ost falsch codiert...
 
-//			byte[] hashInputBytes = jkwAsString.getBytes(StandardCharsets.UTF_8);//StringUtil.getBytesUtf8(jkwAsString);
-//			MessageDigest md = MessageDigest.getInstance("SHA-256");
-//			md.update(hashInputBytes);
-//			byte[] thumbprintAsBytes = md.digest();
-			
+			//			byte[] hashInputBytes = jkwAsString.getBytes(StandardCharsets.UTF_8);//StringUtil.getBytesUtf8(jkwAsString);
+			//			MessageDigest md = MessageDigest.getInstance("SHA-256");
+			//			md.update(hashInputBytes);
+			//			byte[] thumbprintAsBytes = md.digest();
+
 			byte[] thumbprintAsBytes = getSHA256AsBytes(jkwAsString);
 
 
 			//String thumbprint = base64UrlEncode(thumbprintAsBytes);
 			//String thumbprint = Base64.getUrlEncoder().withoutPadding().encodeToString(thumbprintAsBytes);
 			String thumbprint = getSHA256AsString(jkwAsString);
-					
+
 			//encodeBase64String(thumbprintAsBytes.g, false);
 
 			//			
@@ -841,6 +913,8 @@ Content-Type: application/jose+json
 	}
 
 	public void fullfillChallenge() {
+		getANonce();
+
 		try {
 			URL resourceUrl = null;
 			String token = "";
@@ -969,7 +1043,40 @@ Content-Type: application/jose+json
 	}
 
 
-	/*	
+	/*
+Once the client believes it has fulfilled the server’s requirements,
+it should send a POST request to the order resource’s finalize URL.
+The POST body MUST include a CSR:
+csr (required, string): A CSR encoding the parameters for the
+certificate being requested [RFC2986]. The CSR is sent in the
+base64url-encoded version of the DER format. (Note: Because this
+field uses base64url, and does not include headers, it is
+different from PEM.)
+POST /acme/order/TOlocE8rfgo/finalize HTTP/1.1
+Host: example.com
+Content-Type: application/jose+json
+{
+"protected": base64url({
+"alg": "ES256",
+"kid": "https://example.com/acme/acct/evOfKhNU60wg",
+"nonce": "MSF2j2nawWHPxxkE3ZJtKQ",
+"url": "https://example.com/acme/order/TOlocE8rfgo/finalize"
+}),
+"payload": base64url({
+"csr": "MIIBPTCBxAIBADBFMQ...FS6aKdZeGsysoCo4H9P",
+}),
+"signature": "uOrUfIIk5RyQ...nw62Ay1cl6AB"
+}
+The CSR encodes the client’s requests with regard to the content of
+the certificate to be issued. The CSR MUST indicate the exact same
+set of requested identifiers as the initial newOrder request.
+Identifiers of type "dns" MUST appear either in the commonName
+portion of the requested subject name or in an extensionRequest
+attribute [RFC2985] requesting a subjectAltName extension, or both.
+(These identifiers may appear in any sort order.) Specifications
+that define new identifier types must specify where in the
+certificate signing request these identifiers can appear.
+
 	POST /acme/order/TOlocE8rfgo/finalize HTTP/1.1
 	Host: example.com
 	Content-Type: application/jose+json
@@ -987,24 +1094,24 @@ Content-Type: application/jose+json
 	}
 	 */
 	private void finalizeNewOrder() {
+		getANonce();
 
 		try {
-
 
 			String finalizeURL = removeQuotes(orderObject.get("finalize").toString());
 			System.out.println("finalizeURL="+finalizeURL);
 
 			URL resourceUrl = new URL(finalizeURL);
 
-			//payload DUMMY replace!!!!!!!
+			//!!! allenfalls anführungszeichen nötig
+			String csrAsString = Base64.getUrlEncoder().withoutPadding().encodeToString(certHelper.createCSR(domainList));
+			//payload
 			JsonObject payloadPart = Json.createObjectBuilder()
-					.add("identifiers",Json.createArrayBuilder()
-							.add(Json.createObjectBuilder().add("type","dns").add("value",domain).build())
-							)
+					.add("csr",csrAsString)
 					.build();
 
 
-
+			//ok?
 			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
 
 			String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
@@ -1028,6 +1135,8 @@ Content-Type: application/jose+json
 	 * returns the status/details of orders orderObjectLocation
 	 */
 	public void postAsGetOrderStatus() {
+		getANonce();
+
 
 		URL resourceUrl = orderObjectLocation;
 
@@ -1037,14 +1146,99 @@ Content-Type: application/jose+json
 
 		System.out.println("postAsGetOrderStatus(): "+responseJson);
 		String status = responseJson.getString("status");
-		if (status.equals("ready")) {
-			readForFinalization = true;
-			System.out.println("postAsGetOrderStatus(): status="+status + " => setting readForFinalization = true ...");
-		} else {
-			System.out.println("postAsGetOrderStatus(): status="+status + " => not ready ...");
 
+		switch(status) {
+		case "ready":{
+
+			//submitting finalization request
+			readForFinalization = true;
+			System.out.println("postAsGetOrderStatus(): status="+status + " => setting readForFinalization = true ... \"ready\": The server agrees that the requirements have been\n" + 
+					"fulfilled, and is awaiting finalization. Submit a finalization\n" + 
+					"request.");
+			break;
+		}
+		case "valid":{
+			readForDownload = true;
+			System.out.println("postAsGetOrderStatus(): status="+status + " => setting readForDownload = true ... \"valid\": The server has issued the certificate and provisioned its\n" + 
+					"URL to the \"certificate\" field of the order. Download the\n" + 
+					"certificate.");
+			try {
+				certDownloadUrl = new URL(responseJson.getString("certificate"));
+				System.out.println("postAsGetOrderStatus(): setting certDownloadUrl="+certDownloadUrl.toString());
+
+			} catch (MalformedURLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			break;
+		}
+		case "invalid":{
+			System.out.println("postAsGetOrderStatus(): status="+status + " => \"invalid\": The certificate will not be issued.\n" + 
+					"order process abandoned.");
+			break;
+		}
+		case "pending":{
+			//TODO check pennding authorizations that need to be fullfilled
+			System.out.println("postAsGetOrderStatus(): status="+status + " => \"pending\": The server does not believe that the client has\n" + 
+					"fulfilled the requirements. Check the \"authorizations\" array for\n" + 
+					"entries that are still pending.");
+			break;
+		}
+		case "processing":{
+			System.out.println("postAsGetOrderStatus(): status="+status + " => \"processing\": The certificate is being issued. Send a POST-as-GET\n" + 
+					"request after the time given in the Retry-After header field of\n" + 
+					"the response, if any.");
+			//TODO get this Retry-After and USE it
+
+			break;
+		}
+		default: {
+			System.out.println("ERROR!!!!!!!!!!!! postAsGetOrderStatus(): status="+status + " => CASE NOT IMPLEMENTED");
+			break;
+		}
+		}
+
+
+	}
+
+	public void postAsGetDownloadCert() {
+		getANonce();
+		try {
+
+
+			URL resourceUrl = certDownloadUrl;
+
+			HttpsURLConnection connectionACME = postAsGetMode(resourceUrl, "downloadCert");
+
+
+			BufferedReader newAccountResponse = new BufferedReader(new InputStreamReader(connectionACME.getInputStream()));
+
+			System.out.println("postAsGetDownloadCert(): Cert=\n");
+			certificatePem = "";
+			String inputLine = "";
+			while((inputLine = newAccountResponse.readLine()) != null){
+				certificatePem += "\n"+ inputLine;
+			}
+			//set it in the certHelper
+			certHelper.certificatePem = certificatePem;
+			System.out.println(certificatePem);
+
+
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 
 	}
+
+	public void installCert() throws Exception {
+		//Stops the https server and restarts it with a new certificate
+
+		runACME.certificateHttpsServer.server.stop(0);
+		runACME.certificateHttpsServer = new HTTPServer(runACME.certificateHttpsPort, "cert", certHelper);
+	}
+
+
+
 
 }

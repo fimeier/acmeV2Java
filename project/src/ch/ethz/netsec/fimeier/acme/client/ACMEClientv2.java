@@ -268,6 +268,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 				}
 
 				//TODO ANPASSEN
+				//baue das in json parser sein... der kann ja eigentlich auch den return code abfragen....
 				if (newACMEConnection.getResponseCode()==400 || newACMEConnection.getResponseCode()==403) {
 					System.out.println("------------------HTTP 400||403-----------------------");
 					BufferedReader errorStream = new BufferedReader(new InputStreamReader(newACMEConnection.getErrorStream()));
@@ -542,6 +543,10 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 
 		installCert();
+		
+		
+		if (revokeCertAfterObtained)
+			postRevokeCert();
 
 
 
@@ -1233,6 +1238,65 @@ certificate signing request these identifiers can appear.
 
 		runACME.certificateHttpsServer.server.stop(0);
 		runACME.certificateHttpsServer = new HTTPServer(runACME.certificateHttpsPort, "cert", certHelper);
+	}
+	
+	
+	
+/*
+	Example using an account key pair for the signature:
+		POST /acme/revoke-cert HTTP/1.1
+		Host: example.com
+		Content-Type: application/jose+json
+		{
+		"protected": base64url({
+		"alg": "ES256",
+		"kid": "https://example.com/acme/acct/evOfKhNU60wg",
+		"nonce": "JHb54aT_KTXBWQOzGYkt9A",
+		"url": "https://example.com/acme/revoke-cert"
+		}),
+		"payload": base64url({
+		"certificate": "MIIEDTCCAvegAwIBAgIRAP8...",
+		"reason": 4
+		}),
+		"signature": "Q1bURgJoEslbD1c5...3pYdSMLio57mQNN4"
+		}
+*/
+	private void postRevokeCert() {
+		getANonce();
+
+		try {
+
+			URL resourceUrl = revokeCert;
+
+
+
+			//payload replace
+			JsonObject payloadPart = Json.createObjectBuilder()
+					.add("certificate",Base64.getUrlEncoder().withoutPadding().encodeToString(certHelper.certificateDer))
+					.add("reason", 4)
+					.build();
+			
+			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
+
+			String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
+
+			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
+
+			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
+			
+			if (connectionACME.getResponseCode()==200) {
+				System.out.println("postRevokeCert(): Revoked Certificate succesfully!!!!!");
+			} else {
+				BufferedReader errorStream = new BufferedReader(new InputStreamReader(connectionACME.getErrorStream()));
+				JsonReader responseReader = Json.createReader(errorStream);
+				JsonObject responseJson = responseReader.readObject();
+				System.out.println("postRevokeCert(): "+responseJson);
+			}
+			
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
 	}
 
 

@@ -47,9 +47,10 @@ public class CertificatesForAcmeHelper {
 	/*
 	 * state
 	 */
-	byte[] csrAsBytes = null;
+	public byte[] csrAsBytes = null;
 	//ugly: set by ACMECLientvs.postAsGetDownloadCert() 
 	public String certificatePem = "";
+	public byte[] certificateDer;
 
 
 
@@ -64,6 +65,7 @@ public class CertificatesForAcmeHelper {
 
 		PrivateKey privateKey = keyPairForCerts.getPrivate();
 
+		Boolean firstCert = true;
 		int start = 0;
 		while (m.find(start)) {
 			String type = m.group(1);
@@ -74,6 +76,11 @@ public class CertificatesForAcmeHelper {
 			if (type.contains("CERTIFICATE")) {
 				Certificate cert = certFactory.generateCertificate(new ByteArrayInputStream(data));
 				certList.add(cert);
+				if (firstCert) {
+					firstCert = false;
+					certificateDer = cert.getEncoded();
+				}
+				
 			}
 			else {
 				System.err.println("ERRRRRROR type unknown..... " + type);

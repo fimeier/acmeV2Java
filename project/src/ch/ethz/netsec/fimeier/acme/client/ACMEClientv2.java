@@ -509,43 +509,43 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		fullfillChallenge();
 
 
+		try {
+			while(!readForFinalization) {
+				postAsGetOrderStatus();
+				Thread.currentThread().sleep(1000);
+			}
+
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		//		System.out.println("sleeping for 60 seconds.....");
 		//		try {
-		//			while(!readForFinalization) {
-		//				postAsGetOrderStatus();
-		//				Thread.currentThread().sleep(1000);
-		//			}
+		//			Thread.currentThread().sleep(5000);
+		//
 		//
 		//		} catch (InterruptedException e) {
 		//			// TODO Auto-generated catch block
 		//			e.printStackTrace();
 		//		}
-		System.out.println("sleeping for 60 seconds.....");
-		try {
-			Thread.currentThread().sleep(30000);
-
-
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		System.out.println("fertig sleeping for 60 seconds.....");
+		//		System.out.println("fertig sleeping for 60 seconds.....");
 
 
 
 		finalizeNewOrder();
 
-		try {
-			Thread.currentThread().sleep(5000);
+	
 
+		try {
+			while(!readForDownload) {
+				postAsGetOrderStatus();
+				Thread.currentThread().sleep(1000);
+			}
 
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
-		postAsGetOrderStatus();
-
-
 		postAsGetDownloadCert();
 
 

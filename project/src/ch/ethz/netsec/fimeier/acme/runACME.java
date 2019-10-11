@@ -139,10 +139,16 @@ public class runACME {
 			e.printStackTrace();
 		}
 
-
+		System.out.println("Calling shutdownHttp.server.stop(0)....");
 		shutdownHttp.server.stop(0);
+		
+		System.out.println("Calling certificateHttpsServer.server.stop(0)....");
 		certificateHttpsServer.server.stop(0);
-
+		
+		System.out.println("Calling challengeHttpsServer.server.stop(0)....");
+		challengeHttpsServer.server.stop(0);
+		
+		System.out.println("Calling dnsServer.stop()....");
 		dnsServer.stop();
 
 		System.out.println("Everything closed!!! End of program....");

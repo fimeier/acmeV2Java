@@ -69,8 +69,7 @@ public class DNSServer {
 		shutdowneverything = true;
 		dnsThread.interrupt();
 		dnsSocket.close();
-		dnsThread = null;
-		
+		dnsThread = null;		
 	}
 
 
@@ -102,7 +101,7 @@ public class DNSServer {
 					dnsSocket.receive(packetIn);
 				} catch (IOException e1) {
 					// TODO Auto-generated catch block
-					e1.printStackTrace();
+					System.out.println("joining dns thread....");
 					return;
 				}
 				Message msg = null;

@@ -1069,8 +1069,10 @@ Content-Type: application/jose+json
 				if (doSlowMotionChallenges) {
 					System.out.println("fullfillChallenge(): waiting for challenge to be fullfilled");
 					//TODO implement this properly
+					//versuche resourceUrl PostAsGet "" ums tatus zu erhalten...
 					try {
-						Thread.currentThread().sleep(5000);
+						while(!isChallengeFullfilled(resourceUrl))
+							Thread.currentThread().sleep(1000);
 					} catch (InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
@@ -1173,6 +1175,44 @@ certificate signing request these identifiers can appear.
 		}
 	}
 
+	public Boolean isChallengeFullfilled(URL challengeObjectUrl) {
+		getANonce();
+
+		URL resourceUrl = challengeObjectUrl;
+
+		HttpsURLConnection connectionACME = postAsGet(resourceUrl);
+
+		JsonObject responseJson = parseResponseIntoJson(connectionACME);
+
+		System.out.println("postAsGetChallengeStatus(): "+responseJson);
+		
+		String status = responseJson.getString("status");
+		//"pending", "processing", "valid", and "invalid"
+		
+		switch(status) {
+		case "valid":{
+			System.out.println("isChallengeFullfilled(): "+challengeObjectUrl.toString() +" has status VALID...");
+			return true;
+		}
+		case "pending":{
+			System.out.println("isChallengeFullfilled(): "+challengeObjectUrl.toString() +" has status PENDING...");
+			return false;
+		}
+		case "processing":{
+			System.out.println("isChallengeFullfilled(): "+challengeObjectUrl.toString() +" has status PROCESSING...");
+			return false;
+		}
+		case "invalid":{
+			System.out.println("isChallengeFullfilled(): "+challengeObjectUrl.toString() +" has status INVALID... ERRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRROR");
+			return false;
+		}
+		default: {
+			System.out.println("ERROR!!!!!!!!!!!! isChallengeFullfilled(): status="+status + " => CASE NOT IMPLEMENTED");
+			return false;
+		}
+		}
+
+	}
 	/*
 	 * returns the status/details of orders orderObjectLocation
 	 */

@@ -21,7 +21,10 @@ import java.security.Signature;
 import java.security.interfaces.RSAPublicKey;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import javax.json.Json;
 import javax.json.JsonArrayBuilder;
@@ -72,6 +75,7 @@ public class ACMEClientv2 {
 	private List<JsonValue> dnsChallengeJsonList;
 	private List <JsonValue> httpChallengeJsonList;
 	private List <String> domainsSortedForChallenges;
+	private Boolean doSlowMotionChallenges = false; //needed for *.example.com example.com => challenges would override each other
 	private Boolean readForFinalization = false;
 	private Boolean readForDownload = false;
 	private URL certDownloadUrl;
@@ -538,7 +542,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 		finalizeNewOrder();
 
-	
+
 
 		try {
 			while(!readForDownload) {
@@ -814,6 +818,8 @@ Content-Type: application/jose+json
 
 			//ev mehrere Objekte im array
 
+			Set<String> uniqueDomains = new HashSet<String>();
+
 			for (JsonValue authJson: orderObject.get("authorizations").asJsonArray()){
 				//				System.out.println("!!!!!authorizations-list"+a.toString());
 				//			}
@@ -850,7 +856,13 @@ Content-Type: application/jose+json
 				//ultra ugly
 				String domain = responseJson.asJsonObject().get("identifier").asJsonObject().get("value").toString();
 				domainsSortedForChallenges.add(removeQuotes(domain));
-				
+
+				//for doSlowMotionChallenges
+				if (uniqueDomains.contains(removeQuotes(domain)))
+					doSlowMotionChallenges = true;
+				else
+					uniqueDomains.add(removeQuotes(domain));
+
 				for (JsonValue challenge: responseJson.get("challenges").asJsonArray()) {
 
 					System.out.println("type="+((JsonObject) challenge).get("type").toString());
@@ -1053,6 +1065,17 @@ Content-Type: application/jose+json
 				System.out.println("fullfillChallenge(): "+responseJson);
 
 				challengeNumber++;
+
+				if (doSlowMotionChallenges) {
+					System.out.println("fullfillChallenge(): waiting for challenge to be fullfilled");
+					//TODO implement this properly
+					try {
+						Thread.currentThread().sleep(5000);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
 			}
 		}
 		catch (Exception e) {

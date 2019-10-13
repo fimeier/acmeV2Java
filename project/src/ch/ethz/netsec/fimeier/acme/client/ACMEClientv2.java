@@ -1,8 +1,6 @@
 package ch.ethz.netsec.fimeier.acme.client;
 
 
-
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -24,7 +22,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import javax.json.Json;
@@ -47,6 +44,7 @@ public class ACMEClientv2 {
 	 */
 	private String challengeType;
 	private URL dirUrl;
+	@SuppressWarnings("unused")
 	private InetAddress ipForDomain;
 	private List<String> domainList;
 	private boolean revokeCertAfterObtained;
@@ -57,8 +55,10 @@ public class ACMEClientv2 {
 	private URL newNonce;
 	private URL newAccount;
 	private URL newOrder;
+	@SuppressWarnings("unused")
 	private URL newAuthz;
 	private URL revokeCert;
+	@SuppressWarnings("unused")
 	private URL keyChange;
 	private JsonValue meta;
 
@@ -66,6 +66,7 @@ public class ACMEClientv2 {
 	/*
 	 * State variable
 	 */
+	@SuppressWarnings("unused")
 	private Boolean isWildCard = false;
 	private String nonce;
 	private String orders;
@@ -416,20 +417,20 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	 * returns the open orders {"orders":[]}
 	 * should be stored in orderObjectLocation by postNewOrder()
 	 */
-	public void postAsGetOrders() {
+	public Boolean postAsGetOrders() {
 		URL resourceUrl = ordersURL;
 
-		//HttpsURLConnection connectionACME = postAsGet(resourceUrl);
 		AcmeHTTPsConnection acmeConnection = postAsGet(resourceUrl);
-
-
-		//JsonObject responseJson = parseResponseIntoJson(connectionACME);
+		if (acmeConnection.badNonce) {
+			System.out.println("badNonce found!!!! Returning false...");
+			return false;
+		}
 		JsonObject responseJson = acmeConnection.responseJson;
-
 
 		System.out.println("postAsGetOrder(): "+responseJson);
 		System.out.println("orderObjectLocation: "+orderObjectLocation);
 
+		return true;
 	}
 
 	//downloadCert
@@ -531,13 +532,14 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 		while (!postAsGetAuthorizationResources());
 
-		fullfillChallenge();
+		while (!postAsGetFullfillAllChallenges());
 
 
 		try {
 			while(!readForFinalization) {
 				while(!postAsGetOrderStatus());
-				Thread.currentThread().sleep(1000);
+				Thread.currentThread();
+				Thread.sleep(1000);
 			}
 
 		} catch (InterruptedException e) {
@@ -547,14 +549,15 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 
 
-		finalizeNewOrder();
+		while(!finalizeNewOrder());
 
 
 
 		try {
 			while(!readForDownload) {
 				while(!postAsGetOrderStatus());
-				Thread.currentThread().sleep(1000);
+				Thread.currentThread();
+				Thread.sleep(1000);
 			}
 
 		} catch (InterruptedException e) {
@@ -608,12 +611,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 			e.printStackTrace();
 		}
 	}
-	/*
-	 * TODO
-	 */
-	public void postANonce() {
 
-	}
 
 	private void getDirectory() {
 		try {
@@ -986,7 +984,7 @@ Content-Type: application/jose+json
 
 	}
 
-	public Boolean fullfillChallenge() {
+	public Boolean postAsGetFullfillAllChallenges() {
 		System.out.println("fullfillChallenge(): starting...");
 		getANonce();
 
@@ -1095,9 +1093,8 @@ Content-Type: application/jose+json
 
 			if (doSlowMotionChallenges) {
 				System.out.println("fullfillChallenge(): waiting for challenge to be fullfilled");
-				//TODO implement this properly
-				//versuche resourceUrl PostAsGet "" ums tatus zu erhalten...
 				try {
+					//TODO: Deadlock if challenge under rest aka resourceUrl is not correctly fullfilled
 					while(!isChallengeFullfilled(resourceUrl))
 						Thread.currentThread().sleep(1000);
 				} catch (InterruptedException e) {
@@ -1106,7 +1103,7 @@ Content-Type: application/jose+json
 				}
 			}
 		}
-		
+
 		return true;
 	}
 
@@ -1161,46 +1158,47 @@ certificate signing request these identifiers can appear.
 	"signature": "uOrUfIIk5RyQ...nw62Ay1cl6AB"
 	}
 	 */
-	private void finalizeNewOrder() {
+	private Boolean finalizeNewOrder() {
 		getANonce();
 
+
+		String finalizeURL = removeQuotes(orderObject.get("finalize").toString());
+		System.out.println("finalizeURL="+finalizeURL);
+
+		URL resourceUrl = null;
 		try {
-
-			String finalizeURL = removeQuotes(orderObject.get("finalize").toString());
-			System.out.println("finalizeURL="+finalizeURL);
-
-			URL resourceUrl = new URL(finalizeURL);
-
-			//!!! allenfalls anführungszeichen nötig
-			String csrAsString = Base64.getUrlEncoder().withoutPadding().encodeToString(certHelper.createCSR(domainList));
-			//payload
-			JsonObject payloadPart = Json.createObjectBuilder()
-					.add("csr",csrAsString)
-					.build();
-
-
-			//ok?
-			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
-
-			String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
-
-			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
-
-			//HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
-			AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
-			acmeConnection.connect  (resourceUrl, postAsGetJsonAsByte, "POST");
-			HttpsURLConnection connectionACME = acmeConnection.newACMEConnection;
-
-			//JsonObject responseJson = parseResponseIntoJson(connectionACME);
-			JsonObject responseJson = acmeConnection.responseJson;
-
-			System.out.println("finalizeNewOrder(): "+responseJson);
-
-
-		}
-		catch (Exception e) {
+			resourceUrl = new URL(finalizeURL);
+		} catch (MalformedURLException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+
+		//!!! allenfalls anführungszeichen nötig
+		String csrAsString = Base64.getUrlEncoder().withoutPadding().encodeToString(certHelper.createCSR(domainList));
+		//payload
+		JsonObject payloadPart = Json.createObjectBuilder()
+				.add("csr",csrAsString)
+				.build();
+
+
+		//ok?
+		JsonObject protectedPart = createProtectedPartKid(resourceUrl);
+
+		String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
+
+		byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
+
+		AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
+		acmeConnection.connect  (resourceUrl, postAsGetJsonAsByte, "POST");
+		if (acmeConnection.badNonce) {
+			System.out.println("badNonce found!!!! Returning false...");
+			return false;
+		}
+
+		JsonObject responseJson = acmeConnection.responseJson;
+		System.out.println("finalizeNewOrder(): "+responseJson);
+
+		return true;
 	}
 
 	public Boolean isChallengeFullfilled(URL challengeObjectUrl) {

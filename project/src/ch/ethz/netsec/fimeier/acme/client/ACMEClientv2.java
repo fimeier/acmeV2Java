@@ -11,6 +11,7 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
@@ -201,35 +202,60 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	}
 
 
-	private JsonObject parseResponseIntoJson(HttpsURLConnection newACMEConnection) {
-		BufferedReader newAccountResponse;
-		try {
-			newAccountResponse = new BufferedReader(new InputStreamReader(newACMEConnection.getInputStream()));
-			JsonReader responseReader = Json.createReader(newAccountResponse);
-			JsonObject responseJson = responseReader.readObject();
-			return responseJson;
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		return null;
+	//	private JsonObject parseResponseIntoJson_Temp(HttpsURLConnection newACMEConnection) {
+	//		BufferedReader newAccountResponse;
+	//		try {
+	//			newAccountResponse = new BufferedReader(new InputStreamReader(newACMEConnection.getInputStream()));
+	//			JsonReader responseReader = Json.createReader(newAccountResponse);
+	//			JsonObject responseJson = responseReader.readObject();
+	//			return responseJson;
+	//		} catch (IOException e) {
+	//			// TODO Auto-generated catch block
+	//			e.printStackTrace();
+	//		}
+	//		return null;
+	//	}
 
+	private Boolean checkForBadNonce(JsonObject responseJson) {
+		// example: {"type":"urn:ietf:params:acme:error:badNonce","detail":"JWS has an invalid anti-replay nonce: xkQxaQ2daTVPhZb57-sSnQ","status":400}
+		Boolean badNonce = false;
+		if (responseJson.containsKey("type"))
+			if (responseJson.getString("type").equals("urn:ietf:params:acme:error:badNonce")) {
+				badNonce = true;
+				System.out.println("###########################################################");
+				System.out.println("###########################################################");
+				System.out.println("###########################################################");
+				System.out.println("###########################################################");
+				System.out.println("checkForBadNonce(): bad nonce found!!!");
+				System.out.println("###########################################################");
+				System.out.println("###########################################################");
+				System.out.println("###########################################################");
+				System.out.println("###########################################################");
+			}
+
+		return badNonce;
 	}
-	/*
-	 * mode = POST or GET
-	 */
-	/*
-	 * Todo: Probleme wie bad nonce können hier nicht gelöst werden, da nonce ausserhalb gesetzt wird
-	 */
-	private HttpsURLConnection acmeHTTPsConnection (URL resourceUrl, byte[] bytesToPutOnWire, String mode) {
-		boolean reTry = true;
 
-		int i = 0;
-		while(reTry) {
+	public class AcmeHTTPsConnection{
+
+		/*
+		 * state
+		 */
+		public HttpsURLConnection newACMEConnection;
+		public int responseCode;
+		public Boolean connectionError = false;
+
+		public Boolean badNonce = false;
+
+		public BufferedReader outputStream; //output or error
+
+		public Boolean hasJsonResponse = false;
+		public JsonObject responseJson;
+
+
+		private int connect (URL resourceUrl, byte[] bytesToPutOnWire, String mode) {
 			try {
-
-
-				HttpsURLConnection newACMEConnection = (HttpsURLConnection) resourceUrl.openConnection();
+				newACMEConnection = (HttpsURLConnection) resourceUrl.openConnection();
 
 				if (mode.equals("downloadCert")) {
 					newACMEConnection.setRequestMethod("POST");
@@ -256,68 +282,63 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 				newACMEConnection.connect();
 
-
 				if (mode.equals("POST") || mode.equals("downloadCert")) {
 					OutputStream outputStream = newACMEConnection.getOutputStream();
 					outputStream.write(bytesToPutOnWire);
 					outputStream.flush();
 				}
 
+				responseCode = newACMEConnection.getResponseCode();
+
 				//always store the nonce
 				nonce = newACMEConnection.getHeaderField("Replay-Nonce");
 
-				newACMEConnection.getHeaderFields().forEach((key, headers) -> headers.forEach(value ->
-				System.out.println("HEADER-DEBUGGIN "+key+":"+value)));
 
 
-				//special case for cert download???
-				if (mode.equals("downloadCert")) {
-					return newACMEConnection;
-				}
 
-				//TODO ANPASSEN
-				//baue das in json parser sein... der kann ja eigentlich auch den return code abfragen....
 				if (newACMEConnection.getResponseCode()==400 || newACMEConnection.getResponseCode()==403) {
 					System.out.println("------------------HTTP 400||403-----------------------");
-					BufferedReader errorStream = new BufferedReader(new InputStreamReader(newACMEConnection.getErrorStream()));
-					JsonReader responseReader = Json.createReader(errorStream);
-					JsonObject responseJson = responseReader.readObject();
-					String content = responseJson.toString();
-					System.out.println("content="+content);
+					BufferedReader newACMEConnectionResponse = new BufferedReader(new InputStreamReader(newACMEConnection.getErrorStream()));
+					JsonReader responseReader = Json.createReader(newACMEConnectionResponse);
+					responseJson = responseReader.readObject();
+					hasJsonResponse = true;
 
-					i++;
-					if (i==1) {
-						System.out.println("#################################################################");
-						System.out.println("#################################################################");
-						System.out.println("#############ERROR too many retries##############################");
-						System.out.println("#################################################################");
-						System.out.println("#################################################################");
-						System.out.println("#################################################################");
+					//check for bad nonce
+					badNonce = checkForBadNonce(responseJson);
 
-						reTry = false;
-					}
-					System.out.println("#################################################################");
-					System.out.println("#################################################################");
-					System.out.println("#############HTTP 400 Retrying.....##############################");
-					System.out.println("#################################################################");
-					System.out.println("#################################################################");
-					System.out.println("#################################################################");
+					newACMEConnection.getHeaderFields().forEach((key, headers) -> headers.forEach(value ->
+					System.out.println("HEADER-DEBUGGIN "+key+":"+value)));
 
-
-					//get a fresh nonce
-					//getANonce();
 				} else {
-					return newACMEConnection;
+					//					newACMEConnection.getHeaderFields().forEach((key, headers) -> headers.forEach(value ->
+					//					System.out.println("HEADER-DEBUGGIN "+key+":"+value)));
+
+					//Content-Length:0???
+					int contentLength = newACMEConnection.getHeaderFieldInt("Content-Length", 0);
+					//special case for cert download???
+					if (mode.equals("downloadCert") || contentLength==0) {
+						hasJsonResponse = false;
+					} else {
+						BufferedReader newACMEConnectionResponse = new BufferedReader(new InputStreamReader(newACMEConnection.getInputStream()));
+						JsonReader responseReader = Json.createReader(newACMEConnectionResponse);
+						responseJson = responseReader.readObject();
+						hasJsonResponse = true;
+						badNonce = checkForBadNonce(responseJson);
+					}
 				}
 
 
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
+
+			return responseCode;
+
 		}
-		return null;
 
 	}
+
+
 
 	public String getSignatureAsString(String protectedPartAsString, String payloadPartAsString) {
 		try {
@@ -398,9 +419,13 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	public void postAsGetOrders() {
 		URL resourceUrl = ordersURL;
 
-		HttpsURLConnection connectionACME = postAsGet(resourceUrl);
+		//HttpsURLConnection connectionACME = postAsGet(resourceUrl);
+		AcmeHTTPsConnection acmeConnection = postAsGet(resourceUrl);
 
-		JsonObject responseJson = parseResponseIntoJson(connectionACME);
+
+		//JsonObject responseJson = parseResponseIntoJson(connectionACME);
+		JsonObject responseJson = acmeConnection.responseJson;
+
 
 		System.out.println("postAsGetOrder(): "+responseJson);
 		System.out.println("orderObjectLocation: "+orderObjectLocation);
@@ -408,27 +433,23 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	}
 
 	//downloadCert
-	public HttpsURLConnection postAsGetMode(URL resourceUrl, String mode) {
-		try {
+	public AcmeHTTPsConnection postAsGetMode(URL resourceUrl, String mode) {
 
-			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
 
-			String signatureAsString = getSignatureAsString(protectedPart.toString(), "");
+		JsonObject protectedPart = createProtectedPartKid(resourceUrl);
 
-			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), "", signatureAsString);
+		String signatureAsString = getSignatureAsString(protectedPart.toString(), "");
 
-			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, mode);
+		byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), "", signatureAsString);
 
-			return connectionACME;
+		AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
+		acmeConnection.connect(resourceUrl, postAsGetJsonAsByte, mode);
+		//HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, mode);
 
-		} catch (Exception e) {
-			// TODO: handle exception
-			e.printStackTrace();
-		}
-		return null;
+		return acmeConnection;
 	}
 
-	public HttpsURLConnection postAsGet(URL resourceUrl) {
+	public AcmeHTTPsConnection postAsGet(URL resourceUrl) {
 		return postAsGetMode(resourceUrl, "POST");
 
 	}
@@ -504,22 +525,18 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 		getANonce();
 
 
-		postNewAccount();
+		while(!postNewAccount());
 
-		postNewOrder();
+		while(!postNewOrder());
 
-
-
-		//postAsGetOrders();
-
-		postAsGetAuthorizationResources();
+		while (!postAsGetAuthorizationResources());
 
 		fullfillChallenge();
 
 
 		try {
 			while(!readForFinalization) {
-				postAsGetOrderStatus();
+				while(!postAsGetOrderStatus());
 				Thread.currentThread().sleep(1000);
 			}
 
@@ -527,16 +544,6 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		//		System.out.println("sleeping for 60 seconds.....");
-		//		try {
-		//			Thread.currentThread().sleep(5000);
-		//
-		//
-		//		} catch (InterruptedException e) {
-		//			// TODO Auto-generated catch block
-		//			e.printStackTrace();
-		//		}
-		//		System.out.println("fertig sleeping for 60 seconds.....");
 
 
 
@@ -546,7 +553,7 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 
 		try {
 			while(!readForDownload) {
-				postAsGetOrderStatus();
+				while(!postAsGetOrderStatus());
 				Thread.currentThread().sleep(1000);
 			}
 
@@ -554,14 +561,16 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		postAsGetDownloadCert();
+
+
+		while(!postAsGetDownloadCert());
 
 
 		installCert();
 
 
 		if (revokeCertAfterObtained)
-			postRevokeCert();
+			while(!postRevokeCert());
 
 
 
@@ -666,52 +675,65 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	}
 
 
-	private void postNewAccount() {
+	private Boolean postNewAccount() {
+		System.out.println("postNewAccount(): starting....");
 		getANonce();
 
+		List<URI> contacts = new ArrayList<>(); 
 		try {
-			List<URI> contacts = new ArrayList<>(); 
 			contacts.add(new URI("mailto:cert-admin@example.org"));
 			contacts.add(new URI("mailto:admin@example.org"));
-			Boolean termsOfServiceAgreed = true;
-
-			URL resourceUrl = newAccount;
-
-
-			//payload
-			JsonObject payloadPart = Json.createObjectBuilder()
-					.add("contact", Json.createArrayBuilder().add("mailto:cert-admin@example.org").add("mailto:admin@example.org"))
-					.add("termsOfServiceAgreed", true)
-					.build();
-
-			//Header and jwk
-			JsonObject jwk = createJwk();
-
-			JsonObject protectedPart = createProtectedPartJwk(resourceUrl, jwk);
-
-
-			String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
-
-			byte[] newAccountJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
-
-			HttpsURLConnection newAccountACMEConnection = acmeHTTPsConnection (newAccount, newAccountJsonAsByte, "POST");
-
-			//save account url
-			accountUrl = newAccountACMEConnection.getHeaderField("Location");
-
-
-
-			JsonObject responseJson = parseResponseIntoJson(newAccountACMEConnection);
-			orders = responseJson.getString("orders");
-			ordersURL = new URL(orders);
-
-			System.out.println("newAccountResponse: "+responseJson);
-
-
-		}
-		catch (Exception e) {
+		} catch (URISyntaxException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		Boolean termsOfServiceAgreed = true;
+
+		URL resourceUrl = newAccount;
+
+
+		//payload
+		JsonObject payloadPart = Json.createObjectBuilder()
+				.add("contact", Json.createArrayBuilder().add("mailto:cert-admin@example.org").add("mailto:admin@example.org"))
+				.add("termsOfServiceAgreed", true)
+				.build();
+
+		//Header and jwk
+		JsonObject jwk = createJwk();
+
+		JsonObject protectedPart = createProtectedPartJwk(resourceUrl, jwk);
+
+
+		String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
+
+		byte[] newAccountJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
+
+		//HttpsURLConnection newAccountACMEConnection = acmeHTTPsConnection (newAccount, newAccountJsonAsByte, "POST");
+		AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
+		acmeConnection.connect(newAccount, newAccountJsonAsByte, "POST");
+		if (acmeConnection.badNonce) {
+			System.out.println("badNonce found!!!! Returning false...");
+			return false;
+		}
+		HttpsURLConnection newAccountACMEConnection = acmeConnection.newACMEConnection;
+
+		//save account url
+		accountUrl = newAccountACMEConnection.getHeaderField("Location");
+
+		//JsonObject responseJson = parseResponseIntoJson(newAccountACMEConnection);
+		JsonObject responseJson = acmeConnection.responseJson;
+
+		orders = responseJson.getString("orders");
+		try {
+			ordersURL = new URL(orders);
+		} catch (MalformedURLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		System.out.println("newAccountResponse: "+responseJson);
+
+		return true;
 	}
 
 
@@ -737,63 +759,56 @@ Content-Type: application/jose+json
 "signature": "H6ZXtGjTZyUnPeKn...wEA4TklBdh3e454g"
 }
 	 */
-	private void postNewOrder() {
+	private Boolean postNewOrder() {
 		getANonce();
 
-		try {
+		URL resourceUrl = newOrder;
 
-			URL resourceUrl = newOrder;
+		//payload
+		JsonArrayBuilder allDomainsJsonObject = Json.createArrayBuilder();
 
-
-			//payload
-
-			//String domain = domainList.get(0);
-
-
-			JsonArrayBuilder allDomainsJsonObject = Json.createArrayBuilder();
-
-			for (String domain: domainList) {
-				JsonObject ident = Json.createObjectBuilder().add("type","dns").add("value",domain).build();
-				allDomainsJsonObject.add(ident);
-
-			}
-
-			JsonArrayBuilder identifiersArray = Json.createArrayBuilder().addAll(allDomainsJsonObject);
-
-			JsonObject payloadPart = Json.createObjectBuilder()
-					.add("identifiers",identifiersArray)
-					.build();
-
-
-
-
-			//			JsonObject payloadPart = Json.createObjectBuilder()
-			//					.add("identifiers",Json.createArrayBuilder()
-			//							.add(Json.createObjectBuilder().add("type","dns").add("value",domain).build())
-			//							)
-			//					.build();
-
-			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
-
-			String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
-
-			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
-
-			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
-
-			JsonObject responseJson = parseResponseIntoJson(connectionACME);
-			orderObject = responseJson;
-
-			orderObjectLocation = new URL(connectionACME.getHeaderField("Location"));
-
-			System.out.println("postNewOrder(): "+responseJson);
-			System.out.println("postNewOrder() orderObjectLocation: "+orderObjectLocation.toString());
-
+		for (String domain: domainList) {
+			JsonObject ident = Json.createObjectBuilder().add("type","dns").add("value",domain).build();
+			allDomainsJsonObject.add(ident);
 
 		}
-		catch (Exception e) {
+
+		JsonArrayBuilder identifiersArray = Json.createArrayBuilder().addAll(allDomainsJsonObject);
+
+		JsonObject payloadPart = Json.createObjectBuilder()
+				.add("identifiers",identifiersArray)
+				.build();
+
+		JsonObject protectedPart = createProtectedPartKid(resourceUrl);
+
+		String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
+
+		byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
+
+		AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
+		acmeConnection.connect(resourceUrl, postAsGetJsonAsByte, "POST");
+		if (acmeConnection.badNonce) {
+			System.out.println("badNonce found!!!! Returning false...");
+			return false;
+		}
+
+		HttpsURLConnection connectionACME = acmeConnection.newACMEConnection;
+
+		JsonObject responseJson = acmeConnection.responseJson;
+
+		orderObject = responseJson;
+
+		try {
+			orderObjectLocation = new URL(connectionACME.getHeaderField("Location"));
+		} catch (MalformedURLException e) {
+			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+
+		System.out.println("postNewOrder(): "+responseJson);
+		System.out.println("postNewOrder() orderObjectLocation: "+orderObjectLocation.toString());
+
+		return true;
 	}
 
 	//	//POST-as-GET requests to the indicated URLs
@@ -809,86 +824,89 @@ Content-Type: application/jose+json
 			"finalize":"https://127.0.0.1:14000/finalize-order/XSbrc_B88Hm-hxTUMn7QxW3jDCOHnxcaikrDpXbImio",
 			"authorizations":["https://127.0.0.1:14000/authZ/MeqUJQCIlEqcPKEPVRnHIY9UZq6prlPisW-86NqAqNg"]
 		}
-
 	 */
-	private void postAsGetAuthorizationResources() {
+	private Boolean postAsGetAuthorizationResources() {
 		getANonce();
 
-		try {
 
-			//ev mehrere Objekte im array
+		//ev mehrere Objekte im array
 
-			Set<String> uniqueDomains = new HashSet<String>();
+		Set<String> uniqueDomains = new HashSet<String>();
 
-			for (JsonValue authJson: orderObject.get("authorizations").asJsonArray()){
-				//				System.out.println("!!!!!authorizations-list"+a.toString());
-				//			}
-				//
-				//			String authorizations = removeQuotes(orderObject.get("authorizations").asJsonArray().get(0).toString());
+		for (JsonValue authJson: orderObject.get("authorizations").asJsonArray()){
+			//				System.out.println("!!!!!authorizations-list"+a.toString());
+			//			}
+			//
+			//			String authorizations = removeQuotes(orderObject.get("authorizations").asJsonArray().get(0).toString());
 
-				String authorizations = removeQuotes(authJson.toString());
-				System.out.println("authorizations="+authorizations);
+			String authorizations = removeQuotes(authJson.toString());
+			System.out.println("authorizations="+authorizations);
 
-				URL resourceUrl = new URL(authorizations);
-
-
-				HttpsURLConnection connectionACME = postAsGet(resourceUrl);
-
-				JsonObject responseJson = parseResponseIntoJson(connectionACME);
-
-				System.out.println("postAsGetAuthorizationResources() !!!!!!!! : "+responseJson);
-
-				/*
-				 * 			postAsGetAuthorizationResources(): 
-				 * {"status":"pending",
-				 * "identifier":{"type":"dns","value":"example.com"},
-				 * "challenges":[
-				 * {"type":"tls-alpn-01","url":"https://127.0.0.1:14000/chalZ/JVe6-qnooSHWbdl0o4O3DvSFG62O5PIoAo6HlJPX4pE",
-				 * 					"token":"CKYuYVcX2j-ATEwoY7IiWdXHm5-kXoWGtMBKxxA4-2k","status":"pending"},
-				 * {"type":"dns-01","url":"https://127.0.0.1:14000/chalZ/dysNT8Xho1TiVLDczijJwCjY2EvRny30xvpz_a3tx7c",
-				 * 					"token":"ppRMzz1zMEyICBoubIxGl84IUuWShyjZdwi5-RNpvIo","status":"pending"},
-				 * {"type":"http-01","url":"https://127.0.0.1:14000/chalZ/9b-9q8vsMp7_d2kQSGhwt1S7V69eNlcfHjgZpneK-X8",
-				 * 					"token":"ndUIWzdV3JZRfyOxE2j995vPuZWsEerbyEffEdPX4rE","status":"pending"}],
-				 * "expires":"2019-10-09T13:14:13Z"}
-				 * 
-				 */
-
-				//ultra ugly
-				String domain = responseJson.asJsonObject().get("identifier").asJsonObject().get("value").toString();
-				domainsSortedForChallenges.add(removeQuotes(domain));
-
-				//for doSlowMotionChallenges
-				if (uniqueDomains.contains(removeQuotes(domain)))
-					doSlowMotionChallenges = true;
-				else
-					uniqueDomains.add(removeQuotes(domain));
-
-				for (JsonValue challenge: responseJson.get("challenges").asJsonArray()) {
-
-					System.out.println("type="+((JsonObject) challenge).get("type").toString());
-
-					if ( ((JsonObject) challenge).get("type").toString().equals("\"http-01\"") ){
-						System.out.println("found challenge= "+challenge);
-						JsonValue httpChallengeJson = challenge;
-						httpChallengeJsonList.add(httpChallengeJson);
-					}
-
-					if ( ((JsonObject) challenge).get("type").toString().equals("\"dns-01\"") ){
-						System.out.println("found challenge= "+challenge);
-						JsonValue dnsChallengeJson = challenge;
-						dnsChallengeJsonList.add(dnsChallengeJson);
-					}
-
-				}
-
+			URL resourceUrl = null;
+			try {
+				resourceUrl = new URL(authorizations);
+			} catch (MalformedURLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 
 
+			//HttpsURLConnection connectionACME = postAsGet(resourceUrl);
+			//JsonObject responseJson = parseResponseIntoJson(connectionACME);
+			AcmeHTTPsConnection acmeConnection = postAsGet(resourceUrl);
+			if (acmeConnection.badNonce) {
+				System.out.println("postAsGetAuthorizationResources(): failed because of bad Nonce!!! Returning...");
+				return false;
+			}
 
+			JsonObject responseJson = acmeConnection.responseJson;
+
+			System.out.println("postAsGetAuthorizationResources() !!!!!!!! : "+responseJson);
+
+			/*
+			 * 			postAsGetAuthorizationResources(): 
+			 * {"status":"pending",
+			 * "identifier":{"type":"dns","value":"example.com"},
+			 * "challenges":[
+			 * {"type":"tls-alpn-01","url":"https://127.0.0.1:14000/chalZ/JVe6-qnooSHWbdl0o4O3DvSFG62O5PIoAo6HlJPX4pE",
+			 * 					"token":"CKYuYVcX2j-ATEwoY7IiWdXHm5-kXoWGtMBKxxA4-2k","status":"pending"},
+			 * {"type":"dns-01","url":"https://127.0.0.1:14000/chalZ/dysNT8Xho1TiVLDczijJwCjY2EvRny30xvpz_a3tx7c",
+			 * 					"token":"ppRMzz1zMEyICBoubIxGl84IUuWShyjZdwi5-RNpvIo","status":"pending"},
+			 * {"type":"http-01","url":"https://127.0.0.1:14000/chalZ/9b-9q8vsMp7_d2kQSGhwt1S7V69eNlcfHjgZpneK-X8",
+			 * 					"token":"ndUIWzdV3JZRfyOxE2j995vPuZWsEerbyEffEdPX4rE","status":"pending"}],
+			 * "expires":"2019-10-09T13:14:13Z"}
+			 * 
+			 */
+
+			//ultra ugly
+			String domain = responseJson.asJsonObject().get("identifier").asJsonObject().get("value").toString();
+			domainsSortedForChallenges.add(removeQuotes(domain));
+
+			//for doSlowMotionChallenges
+			if (uniqueDomains.contains(removeQuotes(domain)))
+				doSlowMotionChallenges = true;
+			else
+				uniqueDomains.add(removeQuotes(domain));
+
+			for (JsonValue challenge: responseJson.get("challenges").asJsonArray()) {
+
+				System.out.println("type="+((JsonObject) challenge).get("type").toString());
+
+				if ( ((JsonObject) challenge).get("type").toString().equals("\"http-01\"") ){
+					System.out.println("found challenge= "+challenge);
+					JsonValue httpChallengeJson = challenge;
+					httpChallengeJsonList.add(httpChallengeJson);
+				}
+
+				if ( ((JsonObject) challenge).get("type").toString().equals("\"dns-01\"") ){
+					System.out.println("found challenge= "+challenge);
+					JsonValue dnsChallengeJson = challenge;
+					dnsChallengeJsonList.add(dnsChallengeJson);
+				}
+			}
 		}
-		catch (Exception e) {
-			e.printStackTrace();
-		}
+
+		return true;
 	}
 
 	public byte[] getSHA256AsBytes(String toHashedString) {
@@ -968,122 +986,128 @@ Content-Type: application/jose+json
 
 	}
 
-	public void fullfillChallenge() {
+	public Boolean fullfillChallenge() {
 		System.out.println("fullfillChallenge(): starting...");
 		getANonce();
 
-		try {
-			URL resourceUrl = null;
-			String token = "";
 
-			System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 1");
-
-			List<JsonValue> challengeJsonList = null;
-			if (challengeType.equals("dns01"))
-				challengeJsonList = dnsChallengeJsonList;
-			if (challengeType.equals("http01"))
-				challengeJsonList = httpChallengeJsonList;
-
-			//we need for all domains an A record
-			for (String domain: domainList) {
-
-				runACME.dnsServer.createARecord(removeWildCard(domain)); //createARecord
-			}
-
-			System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 2");
+		URL resourceUrl = null;
+		String token = "";
 
 
-			int challengeNumber = 0;
-			for (JsonValue challenge: challengeJsonList) {
+		List<JsonValue> challengeJsonList = null;
+		if (challengeType.equals("dns01"))
+			challengeJsonList = dnsChallengeJsonList;
+		if (challengeType.equals("http01"))
+			challengeJsonList = httpChallengeJsonList;
 
-				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
+		//we need for all domains an A record
+		for (String domain: domainList) {
 
-				//sortierung stimmt so nicht
-				//String domain = removeWildCard(domainList.get(challengeNumber));
-				String domain = removeWildCard(domainsSortedForChallenges.get(challengeNumber));
-				System.out.println("domaindomaindomaindomaindomain = "+domain);
+			runACME.dnsServer.createARecord(removeWildCard(domain)); //createARecord
+		}
 
 
-				String challengeUrlAsString = removeQuotes(challenge.asJsonObject().get("url").toString());
+
+		int challengeNumber = 0;
+		for (JsonValue challenge: challengeJsonList) {
+
+
+			//sortierung stimmt so nicht
+			//String domain = removeWildCard(domainList.get(challengeNumber));
+			String domain = removeWildCard(domainsSortedForChallenges.get(challengeNumber));
+			System.out.println("domaindomaindomaindomaindomain = "+domain);
+
+
+			String challengeUrlAsString = removeQuotes(challenge.asJsonObject().get("url").toString());
+			try {
 				resourceUrl = new URL(challengeUrlAsString);
-				token = removeQuotes(challenge.asJsonObject().get("token").toString());
-				System.out.println("tokentokentokentokentokentokentoken="+token);
-				String thumbprint = getThumbPrint();
-				String keyAuthorization = token + '.' + thumbprint;
-
-				System.out.println("fullfillChallenge()fullfillChallenge()fullfillChallenge(): 3");
-
-				if (challengeType.equals("dns01")){
-					System.out.println("dns01-challengeUrlAsString="+challengeUrlAsString);
+			} catch (MalformedURLException e1) {
+				e1.printStackTrace();
+			}
+			token = removeQuotes(challenge.asJsonObject().get("token").toString());
+			System.out.println("tokentokentokentokentokentokentoken="+token);
+			String thumbprint = getThumbPrint();
+			String keyAuthorization = token + '.' + thumbprint;
 
 
-					String hashOfKeyAuthorization = getSHA256AsString(keyAuthorization);
-					//					System.out.println("fullfillChallenge(): keyAuthorization ="+keyAuthorization);
-					//					System.out.println("fullfillChallenge(): keyAuthorization2="+hashOfKeyAuthorization);
-
-					//for (String domain: domainList) {
-					String challengeDomain = "_acme-challenge."+domain;
-					runACME.dnsServer.createTxtRecord(challengeDomain, hashOfKeyAuthorization);
-					//}
-
-				} 
+			if (challengeType.equals("dns01")){
+				System.out.println("dns01-challengeUrlAsString="+challengeUrlAsString);
 
 
-				if (challengeType.equals("http01")){
-					System.out.println("http01-challengeUrlAsString="+challengeUrlAsString);
-					/*
-					 * The path at which the resource is provisioned is comprised of the
+				String hashOfKeyAuthorization = getSHA256AsString(keyAuthorization);
+				//					System.out.println("fullfillChallenge(): keyAuthorization ="+keyAuthorization);
+				//					System.out.println("fullfillChallenge(): keyAuthorization2="+hashOfKeyAuthorization);
+
+				//for (String domain: domainList) {
+				String challengeDomain = "_acme-challenge."+domain;
+				runACME.dnsServer.createTxtRecord(challengeDomain, hashOfKeyAuthorization);
+				//}
+
+			} 
+
+
+			if (challengeType.equals("http01")){
+				System.out.println("http01-challengeUrlAsString="+challengeUrlAsString);
+				/*
+				 * The path at which the resource is provisioned is comprised of the
 					fixed prefix "/.well-known/acme-challenge/", followed by the "token"
 					value in the challenge. The value of the resource MUST be the ASCII
 					representation of the key authorization.
-					 */
+				 */
 
-					//2"create file on webserver" 
-					// .well-known/acme-challenge/ + Token
-					String filePath = "/.well-known/acme-challenge/" + token;
-					//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
-					//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
-					//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+				//2"create file on webserver" 
+				// .well-known/acme-challenge/ + Token
+				String filePath = "/.well-known/acme-challenge/" + token;
+				//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+				//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
+				//					System.out.println("@@@@@@@@@@@@@@@filePath="+filePath);
 
-					//setting for webserver webserver
-					//					runACME.challengeHttpsServer.challengeUrl = filePath;
-					//					runACME.challengeHttpsServer.challengeContent = keyAuthorization;
-					runACME.challengeHttpsServer.challengeUrlContentMap.put(filePath, keyAuthorization);
-				}
+				//setting for webserver webserver
+				//					runACME.challengeHttpsServer.challengeUrl = filePath;
+				//					runACME.challengeHttpsServer.challengeContent = keyAuthorization;
+				runACME.challengeHttpsServer.challengeUrlContentMap.put(filePath, keyAuthorization);
+			}
 
-				//payload ist "{}" <-FUCK YOU ACME...... 5h FUCK!!!! why not ""???? Fuck rfc... :-)
-				JsonObject protectedPart = createProtectedPartKid(resourceUrl);
+			//payload ist "{}" <-FUCK YOU ACME...... 5h FUCK!!!! why not ""???? Fuck rfc... :-)
+			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
 
-				String signatureAsString = getSignatureAsString(protectedPart.toString(),"{}");
+			String signatureAsString = getSignatureAsString(protectedPart.toString(),"{}");
 
-				byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), "{}", signatureAsString);
+			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), "{}", signatureAsString);
 
-				HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
+			//HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
+			AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
+			acmeConnection.connect (resourceUrl, postAsGetJsonAsByte, "POST");
+			if (acmeConnection.badNonce) {
+				System.out.println("badNonce found!!!! Returning false...");
+				return false;
+			}
+			HttpsURLConnection connectionACME = acmeConnection.newACMEConnection;
 
-				JsonObject responseJson = parseResponseIntoJson(connectionACME);
+			//JsonObject responseJson = parseResponseIntoJson(connectionACME);
+			JsonObject responseJson = acmeConnection.responseJson;
 
-				System.out.println("fullfillChallenge(): "+responseJson);
 
-				challengeNumber++;
+			System.out.println("fullfillChallenge() responseJson=: "+responseJson);
 
-				if (doSlowMotionChallenges) {
-					System.out.println("fullfillChallenge(): waiting for challenge to be fullfilled");
-					//TODO implement this properly
-					//versuche resourceUrl PostAsGet "" ums tatus zu erhalten...
-					try {
-						while(!isChallengeFullfilled(resourceUrl))
-							Thread.currentThread().sleep(1000);
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
+			challengeNumber++;
+
+			if (doSlowMotionChallenges) {
+				System.out.println("fullfillChallenge(): waiting for challenge to be fullfilled");
+				//TODO implement this properly
+				//versuche resourceUrl PostAsGet "" ums tatus zu erhalten...
+				try {
+					while(!isChallengeFullfilled(resourceUrl))
+						Thread.currentThread().sleep(1000);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
 			}
 		}
-		catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		
+		return true;
 	}
 
 
@@ -1162,9 +1186,13 @@ certificate signing request these identifiers can appear.
 
 			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
 
-			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
+			//HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
+			AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
+			acmeConnection.connect  (resourceUrl, postAsGetJsonAsByte, "POST");
+			HttpsURLConnection connectionACME = acmeConnection.newACMEConnection;
 
-			JsonObject responseJson = parseResponseIntoJson(connectionACME);
+			//JsonObject responseJson = parseResponseIntoJson(connectionACME);
+			JsonObject responseJson = acmeConnection.responseJson;
 
 			System.out.println("finalizeNewOrder(): "+responseJson);
 
@@ -1180,15 +1208,21 @@ certificate signing request these identifiers can appear.
 
 		URL resourceUrl = challengeObjectUrl;
 
-		HttpsURLConnection connectionACME = postAsGet(resourceUrl);
+		//HttpsURLConnection connectionACME = postAsGet(resourceUrl);
+		//JsonObject responseJson = parseResponseIntoJson(connectionACME);
+		AcmeHTTPsConnection acmeConnection = postAsGet(resourceUrl);
+		if (acmeConnection.badNonce) {
+			System.out.println("badNonce found!!!! Returning false...");
+			return false;
+		}
 
-		JsonObject responseJson = parseResponseIntoJson(connectionACME);
+		JsonObject responseJson = acmeConnection.responseJson;
 
 		System.out.println("postAsGetChallengeStatus(): "+responseJson);
-		
+
 		String status = responseJson.getString("status");
 		//"pending", "processing", "valid", and "invalid"
-		
+
 		switch(status) {
 		case "valid":{
 			System.out.println("isChallengeFullfilled(): "+challengeObjectUrl.toString() +" has status VALID...");
@@ -1216,15 +1250,20 @@ certificate signing request these identifiers can appear.
 	/*
 	 * returns the status/details of orders orderObjectLocation
 	 */
-	public void postAsGetOrderStatus() {
+	public Boolean postAsGetOrderStatus() {
 		getANonce();
 
 
 		URL resourceUrl = orderObjectLocation;
 
-		HttpsURLConnection connectionACME = postAsGet(resourceUrl);
-
-		JsonObject responseJson = parseResponseIntoJson(connectionACME);
+		//HttpsURLConnection connectionACME = postAsGet(resourceUrl);
+		//JsonObject responseJson = parseResponseIntoJson(connectionACME);
+		AcmeHTTPsConnection acmeConnection = postAsGet(resourceUrl);
+		if (acmeConnection.badNonce) {
+			System.out.println("badNonce found!!!! Returning false...");
+			return false;
+		}
+		JsonObject responseJson = acmeConnection.responseJson;
 
 		System.out.println("postAsGetOrderStatus(): "+responseJson);
 		String status = responseJson.getString("status");
@@ -1280,20 +1319,24 @@ certificate signing request these identifiers can appear.
 		}
 		}
 
-
+		return true;
 	}
 
-	public void postAsGetDownloadCert() {
+	public Boolean postAsGetDownloadCert() {
 		getANonce();
 		try {
 
 
 			URL resourceUrl = certDownloadUrl;
 
-			HttpsURLConnection connectionACME = postAsGetMode(resourceUrl, "downloadCert");
+			//HttpsURLConnection connectionACME = postAsGetMode(resourceUrl, "downloadCert");
+			AcmeHTTPsConnection acmeConnection = postAsGetMode(resourceUrl, "downloadCert");
+			if (acmeConnection.badNonce) {
+				System.out.println("badNonce found!!!! Returning false...");
+				return false;
+			}
 
-
-			BufferedReader newAccountResponse = new BufferedReader(new InputStreamReader(connectionACME.getInputStream()));
+			BufferedReader newAccountResponse = new BufferedReader(new InputStreamReader(acmeConnection.newACMEConnection.getInputStream()));
 
 			System.out.println("postAsGetDownloadCert(): Cert=\n");
 			certificatePem = "";
@@ -1310,6 +1353,8 @@ certificate signing request these identifiers can appear.
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+
+		return true;
 
 	}
 
@@ -1341,42 +1386,37 @@ certificate signing request these identifiers can appear.
 		"signature": "Q1bURgJoEslbD1c5...3pYdSMLio57mQNN4"
 		}
 	 */
-	private void postRevokeCert() {
+	private Boolean postRevokeCert() {
 		getANonce();
 
-		try {
+		URL resourceUrl = revokeCert;
 
-			URL resourceUrl = revokeCert;
+		//payload replace
+		JsonObject payloadPart = Json.createObjectBuilder()
+				.add("certificate",Base64.getUrlEncoder().withoutPadding().encodeToString(certHelper.certificateDer))
+				.add("reason", 4)
+				.build();
 
+		JsonObject protectedPart = createProtectedPartKid(resourceUrl);
+		String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
+		byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
 
-
-			//payload replace
-			JsonObject payloadPart = Json.createObjectBuilder()
-					.add("certificate",Base64.getUrlEncoder().withoutPadding().encodeToString(certHelper.certificateDer))
-					.add("reason", 4)
-					.build();
-
-			JsonObject protectedPart = createProtectedPartKid(resourceUrl);
-
-			String signatureAsString = getSignatureAsString(protectedPart.toString(),payloadPart.toString());
-
-			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), payloadPart.toString(), signatureAsString);
-
-			HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
-
-			if (connectionACME.getResponseCode()==200) {
-				System.out.println("postRevokeCert(): Revoked Certificate succesfully!!!!!");
-			} else {
-				BufferedReader errorStream = new BufferedReader(new InputStreamReader(connectionACME.getErrorStream()));
-				JsonReader responseReader = Json.createReader(errorStream);
-				JsonObject responseJson = responseReader.readObject();
-				System.out.println("postRevokeCert(): "+responseJson);
-			}
-
+		AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
+		acmeConnection.connect(resourceUrl, postAsGetJsonAsByte, "POST");
+		if (acmeConnection.badNonce) {
+			System.out.println("badNonce found!!!! Returning false...");
+			return false;
 		}
-		catch (Exception e) {
-			e.printStackTrace();
+
+
+		if (acmeConnection.responseCode==200) {
+			System.out.println("postRevokeCert(): Revoked Certificate succesfully!!!!!");
+		} else {
+			System.out.println("postRevokeCert(): "+acmeConnection.responseJson);
+			//return false?????
 		}
+
+		return true;
 	}
 
 

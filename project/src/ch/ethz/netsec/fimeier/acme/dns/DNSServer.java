@@ -115,10 +115,10 @@ public class DNSServer {
 
 				Record question = msg.getQuestion();
 				
-				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
-				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
-				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
-				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
+//				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
+//				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
+//				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
+//				System.out.println("DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS...DNS... ");
 
 
 				// Prepare a response
@@ -138,7 +138,7 @@ public class DNSServer {
 					response.addRecord(new ARecord(name, DClass.IN, TTL, a), Section.ANSWER);
 				}
 				
-				System.out.println("MyDNSHandler():"+response.toString());
+//				System.out.println("MyDNSHandler():"+response.toString());
 
 				byte[] outBuffer = response.toWire();
 				DatagramPacket packet = new DatagramPacket(outBuffer, outBuffer.length, packetIn.getAddress(), packetIn.getPort());

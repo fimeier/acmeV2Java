@@ -117,8 +117,6 @@ public class ACMEClientv2 {
 		RSAPublicKey pk = (RSAPublicKey) keyPair.getPublic();
 		String nBigIntegerEncoded = convertBigIntegerToBase64String(pk.getModulus());
 
-		//String nBigIntegerEncodedRef = BigEndianBigInteger.toBase64Url(pk.getModulus());
-
 		return nBigIntegerEncoded;
 	}
 
@@ -134,16 +132,13 @@ public class ACMEClientv2 {
 
 
 
-	/*
-	 * TODO Anpassen/verstehen
-	 */
+
 	private String convertBigIntegerToBase64String(BigInteger bInt) {
 		byte[] twosComplementBytes = bInt.toByteArray();
 		byte[] magnitude;
 
 		if ((bInt.bitLength() % 8 == 0) && (twosComplementBytes[0] == 0) && twosComplementBytes.length > 1)
 		{
-			//magnitude = ByteUtil.subArray(twosComplementBytes, 1, twosComplementBytes.length - 1);
 
 			byte[] magnitudeTemp = new byte[twosComplementBytes.length - 1];
 			System.arraycopy(twosComplementBytes, 1, magnitudeTemp, 0, magnitudeTemp.length);
@@ -153,14 +148,9 @@ public class ACMEClientv2 {
 		{
 			magnitude = twosComplementBytes;
 		}
-		//		Base64Url base64Url = new Base64Url();
-		//		String sRef = base64Url.base64UrlEncode(magnitude);
-
-		//Standard Java
+		
 		String s = Base64.getUrlEncoder().withoutPadding().encodeToString(magnitude);// Regular base64 encoder
-		//String s = Base64.getUrlEncoder().withoutPadding().encodeToString(twosComplementBytes);// Regular base64 encoder
 
-		//s = sRef;
 
 		s = s.split("=")[0]; // Remove any trailing ’=’s
 		s = s.replace('+', '-'); // 62nd char of encoding
@@ -201,21 +191,6 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 }
 		 */
 	}
-
-
-	//	private JsonObject parseResponseIntoJson_Temp(HttpsURLConnection newACMEConnection) {
-	//		BufferedReader newAccountResponse;
-	//		try {
-	//			newAccountResponse = new BufferedReader(new InputStreamReader(newACMEConnection.getInputStream()));
-	//			JsonReader responseReader = Json.createReader(newAccountResponse);
-	//			JsonObject responseJson = responseReader.readObject();
-	//			return responseJson;
-	//		} catch (IOException e) {
-	//			// TODO Auto-generated catch block
-	//			e.printStackTrace();
-	//		}
-	//		return null;
-	//	}
 
 	private Boolean checkForBadNonce(JsonObject responseJson) {
 		// example: {"type":"urn:ietf:params:acme:error:badNonce","detail":"JWS has an invalid anti-replay nonce: xkQxaQ2daTVPhZb57-sSnQ","status":400}
@@ -595,74 +570,64 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 	}
 
 	public void getANonce() {
-		//newNonce
-		try {
-			HttpsURLConnection nonceACMEConnection = (HttpsURLConnection) newNonce.openConnection();
-			nonceACMEConnection.setRequestMethod("GET");
 
-			nonceACMEConnection.setDoOutput(false);
+		AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
+		acmeConnection.connect(newNonce, null, "GET");
 
-			BufferedReader directoryResponse = new BufferedReader(new InputStreamReader(nonceACMEConnection.getInputStream()));
-			nonce = nonceACMEConnection.getHeaderField("Replay-Nonce");
+		System.out.println("getANonce(): "+ nonce);
 
-			System.out.println("getANonce(): "+ nonce);
-		}
-		catch (Exception e) {
-			e.printStackTrace();
-		}
 	}
 
 
 	private void getDirectory() {
 		try {
 
-			HttpsURLConnection dirACMEConnection = (HttpsURLConnection) dirUrl.openConnection();
-			dirACMEConnection.setRequestMethod("GET");
-			dirACMEConnection.setDoOutput(false);
-
-			BufferedReader directoryResponse = new BufferedReader(new InputStreamReader(dirACMEConnection.getInputStream()));
-
-
-
-			JsonReader jsonReader = Json.createReader(directoryResponse);
-			JsonObject jobject = jsonReader.readObject();
+			//			HttpsURLConnection dirACMEConnection = (HttpsURLConnection) dirUrl.openConnection();
+			//			dirACMEConnection.setRequestMethod("GET");
+			//			dirACMEConnection.setDoOutput(false);
+			//			BufferedReader directoryResponse = new BufferedReader(new InputStreamReader(dirACMEConnection.getInputStream()));
+			//			JsonReader jsonReader = Json.createReader(directoryResponse);
+			//			JsonObject jobject = jsonReader.readObject();
 
 
-			newNonce = new URL(jobject.getString("newNonce"));
+			AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
+			acmeConnection.connect(dirUrl, null, "GET");
+
+			JsonObject responseJson = acmeConnection.responseJson;
+
+
+			newNonce = new URL(responseJson.getString("newNonce"));
 			System.out.println("newNonce="+newNonce.toString());
 
-			newAccount = new URL(jobject.getString("newAccount"));
+			newAccount = new URL(responseJson.getString("newAccount"));
 			System.out.println("newAccount="+newAccount.toString());
 
-			newOrder = new URL(jobject.getString("newOrder"));
+			newOrder = new URL(responseJson.getString("newOrder"));
 			System.out.println("newOrder="+newAccount.toString());
 
-			if (jobject.containsKey("newAuthz")) {
-				newAuthz = new URL(jobject.getString("newAuthz"));
+			if (responseJson.containsKey("newAuthz")) {
+				newAuthz = new URL(responseJson.getString("newAuthz"));
 				System.out.println("newAuthz="+newAccount.toString());
 			}
 			else {
 				System.out.println("newAuthz= NOT AVAILABLE");
 			}
 
-			revokeCert = new URL(jobject.getString("revokeCert"));
+			revokeCert = new URL(responseJson.getString("revokeCert"));
 			System.out.println("revokeCert="+newAccount.toString());
 
-			keyChange = new URL(jobject.getString("keyChange"));
+			keyChange = new URL(responseJson.getString("keyChange"));
 			System.out.println("keyChange="+newAccount.toString());
 
-			if (jobject.containsKey("meta")) {
-				meta = jobject.get("meta");
+			if (responseJson.containsKey("meta")) {
+				meta = responseJson.get("meta");
 				System.out.println("meta="+meta.toString());
 			}
 			else {
 				System.out.println("meta= NOT AVAILABLE");
 			}
 
-
-
-			System.out.println("responseString:\n"+jobject.toString());
-			dirACMEConnection.disconnect();
+			System.out.println("responseString:\n"+responseJson.toString());
 
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -685,7 +650,6 @@ return Convert.FromBase64String(s); // Standard base64 decoder
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		Boolean termsOfServiceAgreed = true;
 
 		URL resourceUrl = newAccount;
 
@@ -927,60 +891,18 @@ Content-Type: application/jose+json
 
 
 	public String getThumbPrint() {
-		try {
-			/*
+		/*
+		 * order of public key parts is essential... different for different algorithms
 		"e"
 		 o "kty"
 		 o "n"
-			 */
-			String jkwAsString = createJwk().toString();
-			//n ost falsch codiert...
-
-			//			byte[] hashInputBytes = jkwAsString.getBytes(StandardCharsets.UTF_8);//StringUtil.getBytesUtf8(jkwAsString);
-			//			MessageDigest md = MessageDigest.getInstance("SHA-256");
-			//			md.update(hashInputBytes);
-			//			byte[] thumbprintAsBytes = md.digest();
-
-			byte[] thumbprintAsBytes = getSHA256AsBytes(jkwAsString);
+		 */
+		String jkwAsString = createJwk().toString();
 
 
-			//String thumbprint = base64UrlEncode(thumbprintAsBytes);
-			//String thumbprint = Base64.getUrlEncoder().withoutPadding().encodeToString(thumbprintAsBytes);
-			String thumbprint = getSHA256AsString(jkwAsString);
+		String thumbprint = getSHA256AsString(jkwAsString);
 
-			//encodeBase64String(thumbprintAsBytes.g, false);
-
-			//			
-			//			String referenceTumbprint = base64UrlEncode(JoseUtils.thumbprint(keyPair.getPublic()));
-			//			byte[] thumbprintAsBytesReference = JoseUtils.thumbprint(keyPair.getPublic());
-			//			System.out.println("getThumbPrint(): referenceTumbprint="+referenceTumbprint);
-			//			System.out.println("getThumbPrint(): thumbprint="+thumbprint);
-
-
-
-			/*
-			 * test
-			 */
-			//			byte[] sha256hash(String z) {
-			//			 MessageDigest md = MessageDigest.getInstance("SHA-256");
-			//	            md.update(z.getBytes("UTF-8"));
-			//	            return md.digest();
-			//			}
-			//	            
-			//			 String shit = base64UrlEncode(sha256hash(getAuthorization()));
-			//			
-			//			  public String getAuthorization() {
-			//			        PublicKey pk = getLogin().getKeyPair().getPublic();
-			//			        return getToken() + '.' + base64UrlEncode(JoseUtils.thumbprint(pk));
-
-
-			return thumbprint;
-
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-
-		return "";
+		return thumbprint;
 
 	}
 
@@ -1074,16 +996,13 @@ Content-Type: application/jose+json
 
 			byte[] postAsGetJsonAsByte = getBytesToPutOnWire(protectedPart.toString(), "{}", signatureAsString);
 
-			//HttpsURLConnection connectionACME = acmeHTTPsConnection (resourceUrl, postAsGetJsonAsByte, "POST");
 			AcmeHTTPsConnection acmeConnection = new AcmeHTTPsConnection();
 			acmeConnection.connect (resourceUrl, postAsGetJsonAsByte, "POST");
 			if (acmeConnection.badNonce) {
 				System.out.println("badNonce found!!!! Returning false...");
 				return false;
 			}
-			HttpsURLConnection connectionACME = acmeConnection.newACMEConnection;
 
-			//JsonObject responseJson = parseResponseIntoJson(connectionACME);
 			JsonObject responseJson = acmeConnection.responseJson;
 
 
@@ -1095,8 +1014,10 @@ Content-Type: application/jose+json
 				System.out.println("fullfillChallenge(): waiting for challenge to be fullfilled");
 				try {
 					//TODO: Deadlock if challenge under rest aka resourceUrl is not correctly fullfilled
-					while(!isChallengeFullfilled(resourceUrl))
-						Thread.currentThread().sleep(1000);
+					while(!isChallengeFullfilled(resourceUrl)) {
+						Thread.currentThread();
+						Thread.sleep(1000);
+					}
 				} catch (InterruptedException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -1358,7 +1279,7 @@ certificate signing request these identifiers can appear.
 
 	public void installCert() throws Exception {
 		//Stops the https server and restarts it with a new certificate
-
+		
 		runACME.certificateHttpsServer.server.stop(0);
 		runACME.certificateHttpsServer = new HTTPServer(runACME.certificateHttpsPort, "cert", certHelper);
 	}

@@ -132,7 +132,6 @@ public class CertificatesForAcmeHelper {
 		try {
 			
 			X500NameBuilder nameBuilder = new X500NameBuilder(X500Name.getDefaultStyle());
-			//List<String> alternativeNameList = new ArrayList<>();
 			PKCS10CertificationRequest csr = null;
 
 			//add all domains

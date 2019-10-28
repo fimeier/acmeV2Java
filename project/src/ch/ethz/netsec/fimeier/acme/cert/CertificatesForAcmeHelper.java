@@ -53,7 +53,7 @@ public class CertificatesForAcmeHelper {
 	public byte[] certificateDer;
 
 
-
+	//compare https://stackoverflow.com/a/50119615/11105946
 	public SSLContext createSslContext() throws Exception {
 
 		String pem = certificatePem;
@@ -153,10 +153,13 @@ public class CertificatesForAcmeHelper {
 			PKCS10CertificationRequestBuilder p10Builder = new JcaPKCS10CertificationRequestBuilder(nameBuilder.build(), keyPairForCerts.getPublic());
 
 			ExtensionsGenerator extensionsGenerator = new ExtensionsGenerator();
+			
 			extensionsGenerator.addExtension(Extension.subjectAlternativeName, false, subjectAlternativeName);
+			
 			p10Builder.addAttribute(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extensionsGenerator.generate());
 			
 			JcaContentSignerBuilder csBuilder = new JcaContentSignerBuilder("SHA256withRSA");
+			
 			ContentSigner signer = csBuilder.build(keyPairForCerts.getPrivate());
 
 			csr = p10Builder.build(signer);
